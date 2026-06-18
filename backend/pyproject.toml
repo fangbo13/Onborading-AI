@@ -19,7 +19,6 @@ dependencies = [
     "redis>=5.0",
     "psycopg[binary]>=3.2",
     "pgvector>=0.3",
-    "litellm>=1.50",
     "langchain>=0.3.0",
     "langchain-core>=0.3.0",
     "langchain-text-splitters>=0.3",
