@@ -96,5 +96,17 @@
   "onboarding_start": "Get Started",
   "copy_message": "Copy message",
   "copied": "Copied",
-  "email_readonly_hint": "Email is system-assigned and cannot be changed"
+  "email_readonly_hint": "Email is system-assigned and cannot be changed",
+  "tour_step_chat_title": "Smart Chat",
+  "tour_step_chat_desc": "Ask the AI assistant any onboarding-related questions",
+  "tour_step_history_title": "History Review",
+  "tour_step_history_desc": "View and continue all your previous conversations",
+  "tour_step_knowledge_title": "Knowledge Base",
+  "tour_step_knowledge_desc": "Browse and manage company policy documents (admin only)",
+  "tour_step_profile_title": "Profile Settings",
+  "tour_step_profile_desc": "Manage your language preference and theme settings",
+  "tour_skip": "Skip",
+  "tour_next": "Next",
+  "tour_finish": "Get Started",
+  "tour_start": "Start Tour"
 }

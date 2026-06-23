@@ -95,5 +95,17 @@
   "onboarding_start": "开始使用",
   "copy_message": "复制消息",
   "copied": "已复制",
-  "email_readonly_hint": "邮箱地址由系统分配，不可修改"
+  "email_readonly_hint": "邮箱地址由系统分配，不可修改",
+  "tour_step_chat_title": "智能对话",
+  "tour_step_chat_desc": "在这里向 AI 助手提问任何入职相关问题",
+  "tour_step_history_title": "历史回顾",
+  "tour_step_history_desc": "查看和继续之前的所有对话记录",
+  "tour_step_knowledge_title": "知识库",
+  "tour_step_knowledge_desc": "浏览和管理公司政策文档（仅管理员可见）",
+  "tour_step_profile_title": "个人设置",
+  "tour_step_profile_desc": "管理你的语言偏好和主题设置",
+  "tour_start": "开始引导",
+  "tour_skip": "跳过",
+  "tour_next": "下一步",
+  "tour_finish": "开始使用"
 }

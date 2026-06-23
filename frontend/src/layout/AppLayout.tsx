@@ -51,12 +51,28 @@ export default function AppLayout() {
 
   // Interactive multi-step tour state
   const [tourStep, setTourStep] = useState(-1); // -1 = not in tour mode
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const tourSteps = useMemo(() => [
-    { target: 'tour-nav-chat', title: t('tour_step_chat_title'), desc: t('tour_step_chat_desc'), placement: 'right' },
-    { target: 'tour-nav-history', title: t('tour_step_history_title'), desc: t('tour_step_history_desc'), placement: 'right' },
-    { target: 'tour-nav-knowledge', title: t('tour_step_knowledge_title'), desc: t('tour_step_knowledge_desc'), placement: 'right' },
-    { target: 'tour-nav-profile', title: t('tour_step_profile_title'), desc: t('tour_step_profile_desc'), placement: 'right' },
+    { target: 'tour-nav-chat', title: t('tour_step_chat_title'), desc: t('tour_step_chat_desc') },
+    { target: 'tour-nav-history', title: t('tour_step_history_title'), desc: t('tour_step_history_desc') },
+    { target: 'tour-nav-knowledge', title: t('tour_step_knowledge_title'), desc: t('tour_step_knowledge_desc') },
+    { target: 'tour-nav-profile', title: t('tour_step_profile_title'), desc: t('tour_step_profile_desc') },
   ], [t]);
+
+  // Compute target element position for tour tooltip
+  useEffect(() => {
+    if (tourStep < 0 || tourStep >= tourSteps.length) {
+      setTargetRect(null);
+      return;
+    }
+    const el = document.getElementById(tourSteps[tourStep].target);
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      setTargetRect(rect);
+      el.classList.add('tour-highlight');
+      return () => el.classList.remove('tour-highlight');
+    }
+  }, [tourStep, tourSteps]);
 
   useEffect(() => {
     const handler = () => {
@@ -77,12 +93,12 @@ export default function AppLayout() {
 
   // Memoize menu items to prevent unnecessary re-renders
   const menuItems = useMemo(() => [
-    { key: '/chat', icon: <MessageOutlined />, label: t('nav_chat'), 'aria-current': selectedKey === '/chat' ? 'page' as const : undefined },
-    { key: '/history', icon: <HistoryOutlined />, label: t('nav_history'), 'aria-current': selectedKey === '/history' ? 'page' as const : undefined },
+    { key: '/chat', icon: <MessageOutlined />, label: <span id="tour-nav-chat">{t('nav_chat')}</span>, 'aria-current': selectedKey === '/chat' ? 'page' as const : undefined },
+    { key: '/history', icon: <HistoryOutlined />, label: <span id="tour-nav-history">{t('nav_history')}</span>, 'aria-current': selectedKey === '/history' ? 'page' as const : undefined },
     ...(user?.is_hr_admin
-      ? [{ key: '/admin/knowledge', icon: <BookOutlined />, label: t('nav_knowledge'), 'aria-current': selectedKey === '/admin/knowledge' ? 'page' as const : undefined }]
+      ? [{ key: '/admin/knowledge', icon: <BookOutlined />, label: <span id="tour-nav-knowledge">{t('nav_knowledge')}</span>, 'aria-current': selectedKey === '/admin/knowledge' ? 'page' as const : undefined }]
       : []),
-    { key: '/profile', icon: <UserOutlined />, label: t('nav_profile'), 'aria-current': selectedKey === '/profile' ? 'page' as const : undefined },
+    { key: '/profile', icon: <UserOutlined />, label: <span id="tour-nav-profile">{t('nav_profile')}</span>, 'aria-current': selectedKey === '/profile' ? 'page' as const : undefined },
   ], [selectedKey, user?.is_hr_admin, t]);
 
   // Memoize user dropdown menu
@@ -232,7 +248,7 @@ export default function AppLayout() {
             type="primary"
             size="large"
             icon={<RocketOutlined />}
-            onClick={handleOnboardingClose}
+            onClick={handleStartTour}
             style={{ borderRadius: 12, fontWeight: 500, padding: '0 32px' }}
           >
             {t('onboarding_start')}
@@ -299,6 +315,81 @@ export default function AppLayout() {
           ))}
         </div>
       </Modal>
+
+      {/* Interactive multi-step tour overlay */}
+      {tourStep >= 0 && tourStep < tourSteps.length && (
+        <>
+          {/* Dark overlay */}
+          <div
+            className="tour-overlay"
+            onClick={handleTourSkip}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              zIndex: 999,
+              cursor: 'pointer',
+            }}
+          />
+          {/* Tour tooltip */}
+          {targetRect && (
+          <div
+            className="tour-tooltip"
+            role="dialog"
+            aria-label="Onboarding tour"
+            style={{
+              position: 'fixed',
+              top: targetRect.top - 8,
+              left: targetRect.right + 16,
+              transform: 'translateY(-50%)',
+              zIndex: 1000,
+              background: 'var(--color-bg-container)',
+              borderRadius: 16,
+              padding: '20px 24px',
+              maxWidth: 300,
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.2)',
+              border: '1px solid var(--color-border)',
+              animation: 'fadeInUp 0.3s ease-out',
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 8,
+            }}>
+              <Typography.Text strong style={{ fontSize: 14, color: 'var(--color-text)' }}>
+                {tourSteps[tourStep].title}
+              </Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {tourStep + 1}/{tourSteps.length}
+              </Typography.Text>
+            </div>
+            <Typography.Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 16, lineHeight: 1.5 }}>
+              {tourSteps[tourStep].desc}
+            </Typography.Text>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Button
+                type="text"
+                size="small"
+                onClick={handleTourSkip}
+                style={{ fontSize: 12 }}
+              >
+                {t('tour_skip')}
+              </Button>
+              <Button
+                type="primary"
+                size="small"
+                onClick={handleTourNext}
+                style={{ borderRadius: 8, fontSize: 12 }}
+              >
+                {tourStep < tourSteps.length - 1 ? t('tour_next') : t('tour_finish')}
+              </Button>
+            </div>
+          </div>
+          )}
+        </>
+      )}
 
       {/* Skip to content link */}
       <a

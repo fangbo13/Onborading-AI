@@ -49,6 +49,58 @@ interface ChatState {
   finishStreamingMessage: (messageId: string, sessionId: string) => void;
 }
 
+// Words/phrases that don't make good titles
+const MEANINGLESS_WORDS = new Set([
+  'test', 'test test', 'hello', 'hi', 'hey', '你好', '你好吗', '嗨',
+  '1', 'a', 'the', 'is', 'it', '?', '？', '。', 'test123', 'asd',
+  'asdf', '123', 'abc', 'tt', 'xx',
+]);
+
+// Generate a meaningful session title from user's first message
+function generateSmartTitle(content: string): string {
+  const trimmed = content.trim();
+  if (!trimmed) return '新对话';
+
+  // Check if the content is meaningless
+  const lower = trimmed.toLowerCase();
+  if (MEANINGLESS_WORDS.has(lower)) {
+    return '新对话';
+  }
+
+  // Remove trailing punctuation for cleaner titles
+  let title = trimmed.replace(/[。！？.!?]+$/, '');
+
+  // Extract meaningful content: prefer question-like phrases
+  // If it's a question, take the core part (before the question mark)
+  if (title.includes('?') || title.includes('？')) {
+    const qIndex = Math.max(title.indexOf('?'), title.indexOf('？'));
+    const core = title.substring(0, qIndex).trim();
+    if (core.length >= 2) {
+      title = core;
+    }
+  }
+
+  // Cap title length, prefer word boundaries
+  const MAX_LEN = 30;
+  if (title.length > MAX_LEN) {
+    // For CJK text, just truncate at MAX_LEN
+    const isCJK = /[一-鿿]/.test(title);
+    if (isCJK) {
+      title = title.substring(0, MAX_LEN) + '…';
+    } else {
+      // For English, truncate at word boundary
+      const truncated = title.substring(0, MAX_LEN);
+      const lastSpace = truncated.lastIndexOf(' ');
+      title = lastSpace > MAX_LEN * 0.6 ? truncated.substring(0, lastSpace) + '…' : truncated + '…';
+    }
+  }
+
+  // If the title is too short after cleaning, fallback
+  if (title.length < 2) return '新对话';
+
+  return title;
+}
+
 export const useChatStore = create<ChatState>()((set, get) => ({
   sessions: [],
   activeSessionId: null,
@@ -113,7 +165,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     let sessionId = activeSessionId;
     if (!sessionId) {
       try {
-        const newSession = await chatApi.createSession({ title: content.slice(0, 50) });
+        const newSession = await chatApi.createSession({ title: generateSmartTitle(content) });
         sessionId = newSession.id;
         set({
           activeSessionId: sessionId,
