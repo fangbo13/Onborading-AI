@@ -277,7 +277,7 @@ export default function AppLayout() {
             {t('onboarding_title')}
           </Typography.Title>
           <Text type="secondary" style={{ fontSize: 13 }}>
-            快速了解各导航功能，开始你的入职之旅
+            {t('onboarding_subtitle')}
           </Text>
         </div>
 

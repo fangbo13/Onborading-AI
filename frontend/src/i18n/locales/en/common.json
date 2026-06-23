@@ -108,5 +108,6 @@
   "tour_skip": "Skip",
   "tour_next": "Next",
   "tour_finish": "Get Started",
-  "tour_start": "Start Tour"
+  "tour_start": "Start Tour",
+  "onboarding_subtitle": "Quick overview of navigation features to get started"
 }
