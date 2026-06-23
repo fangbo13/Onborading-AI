@@ -9,12 +9,29 @@ import { useAuth } from './auth/AuthProvider';
 import { useState, useEffect } from 'react';
 import { Form, Input, Button, Typography, Alert, Layout, Space } from 'antd';
 import { MailOutlined, LockOutlined, LoginOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+import i18n from './i18n';
 
 const { Title, Text, Paragraph } = Typography;
 const { Content } = Layout;
 
 function App() {
   const { isAuthenticated } = useAuth();
+
+  // Sync i18n language on mount from stored auth preference
+  useEffect(() => {
+    try {
+      const authStr = localStorage.getItem('ey-auth');
+      if (authStr) {
+        const auth = JSON.parse(authStr);
+        if (auth?.user?.language_preference && auth.user.language_preference !== i18n.language) {
+          i18n.changeLanguage(auth.user.language_preference);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   return (
     <Routes>
@@ -41,6 +58,7 @@ function App() {
 }
 
 function LoginPage() {
+  const { t } = useTranslation('common');
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -92,6 +110,11 @@ function LoginPage() {
           role_level: user.role_level,
         },
       });
+
+      // Sync i18n language after login
+      if (user.language_preference && user.language_preference !== i18n.language) {
+        i18n.changeLanguage(user.language_preference);
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -216,15 +239,15 @@ function LoginPage() {
             minWidth: isNarrow ? 'auto' : 340,
           }}>
             <Title level={3} style={{ marginTop: 0, fontWeight: 600 }}>
-              Welcome Back
+              {t('login_title')}
             </Title>
             <Text type="secondary" style={{ marginBottom: 32, display: 'block' }}>
-              Sign in to your account to continue
+              {t('login_subtitle')}
             </Text>
 
             {error && (
               <Alert
-                message="Login Error"
+                message={t('login_error')}
                 description={error}
                 type="error"
                 showIcon
@@ -244,24 +267,24 @@ function LoginPage() {
               <Form.Item
                 name="email"
                 rules={[
-                  { required: true, message: 'Please enter your email' },
-                  { type: 'email', message: 'Please enter a valid email' },
+                  { required: true, message: t('validation_email_required') },
+                  { type: 'email', message: t('validation_email_invalid') },
                 ]}
               >
                 <Input
                   prefix={<MailOutlined />}
-                  placeholder="your.email@ey.com"
+                  placeholder={t('email_placeholder')}
                   autoComplete="email"
                 />
               </Form.Item>
 
               <Form.Item
                 name="password"
-                rules={[{ required: true, message: 'Please enter your password' }]}
+                rules={[{ required: true, message: t('validation_password_required') }]}
               >
                 <Input.Password
                   prefix={<LockOutlined />}
-                  placeholder="Enter your password"
+                  placeholder={t('password_placeholder')}
                   autoComplete="current-password"
                 />
               </Form.Item>
@@ -276,7 +299,7 @@ function LoginPage() {
                   className="login-submit"
                   style={{ height: 44, fontWeight: 600 }}
                 >
-                  Sign In
+                  {t('sign_in')}
                 </Button>
               </Form.Item>
             </Form>
@@ -290,7 +313,7 @@ function LoginPage() {
                 fontSize: 12,
               }}
             >
-              Demo: admin@ey.com / admin123
+              {t('demo_hint')}
             </Text>
           </div>
         </div>

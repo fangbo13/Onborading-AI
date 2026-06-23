@@ -91,6 +91,20 @@
   --user-msg-bg: #333333;
 }
 
+/* ---- Smooth Theme Transitions ---- */
+/* Scoped to UI containers instead of all elements for better performance */
+.ant-layout, .ant-layout *, .ant-card, .ant-card *, .ant-menu, .ant-menu *,
+.ant-btn, .ant-input, .ant-select, .ant-modal, .ant-modal *, .ant-list, .ant-list *,
+.ant-table, .ant-table *, .ant-alert, .ant-alert *, .ant-dropdown, .ant-dropdown *,
+.ant-tag, .ant-avatar, .ant-typography, .ant-typography * {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Exclude media elements from transitions */
+input, textarea, select, img, svg, canvas, video {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
 /* ---- Global Styles ---- */
 body {
   margin: 0;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { theme as antTheme } from 'antd';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -12,38 +12,57 @@ function getSystemTheme(): 'light' | 'dark' {
   return 'light';
 }
 
-function getEffectiveTheme(mode: ThemeMode): 'light' | 'dark' {
+// Singleton: shared state across all hooks
+let sharedMode: ThemeMode = 'light';
+let sharedEffective: 'light' | 'dark' = 'light';
+const listeners = new Set<(mode: ThemeMode, effective: 'light' | 'dark') => void>();
+
+try {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === 'light' || stored === 'dark' || stored === 'system') {
+    sharedMode = stored;
+  }
+} catch {}
+
+function computeEffective(mode: ThemeMode): 'light' | 'dark' {
   if (mode === 'system') return getSystemTheme();
   return mode;
 }
 
-export function useTheme() {
-  const [mode, setMode] = useState<ThemeMode>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return (stored as ThemeMode) || 'light';
+function notifyAll() {
+  sharedEffective = computeEffective(sharedMode);
+  document.documentElement.setAttribute('data-theme', sharedEffective);
+  listeners.forEach(fn => fn(sharedMode, sharedEffective));
+}
+
+// Initial theme application
+notifyAll();
+
+// System theme listener (singleton)
+if (typeof window !== 'undefined') {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  mq.addEventListener('change', () => {
+    if (sharedMode === 'system') notifyAll();
   });
+}
 
-  const effective = getEffectiveTheme(mode);
+export function useTheme() {
+  const [mode, setMode] = useState<ThemeMode>(sharedMode);
+  const [effective, setEffective] = useState<'light' | 'dark'>(sharedEffective);
 
-  // Apply data-theme attribute for CSS variables
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', effective);
-  }, [effective]);
-
-  // Listen for system theme changes when mode is 'system'
-  useEffect(() => {
-    if (mode !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => {
-      document.documentElement.setAttribute('data-theme', getSystemTheme());
+    const handler = (newMode: ThemeMode, newEffective: 'light' | 'dark') => {
+      setMode(newMode);
+      setEffective(newEffective);
     };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [mode]);
+    listeners.add(handler);
+    return () => { listeners.delete(handler); };
+  }, []);
 
   const setThemeMode = useCallback((newMode: ThemeMode) => {
-    setMode(newMode);
+    sharedMode = newMode;
     localStorage.setItem(STORAGE_KEY, newMode);
+    notifyAll();
   }, []);
 
   return { mode, effective, setThemeMode };

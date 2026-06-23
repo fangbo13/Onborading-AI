@@ -1,3 +1,4 @@
+﻿import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Avatar, Dropdown, Space, Button } from 'antd';
 import {
@@ -20,14 +21,15 @@ export default function AppLayout() {
   const location = useLocation();
   const { effective, setThemeMode } = useTheme();
   const isDark = effective === 'dark';
+  const { t } = useTranslation('common');
 
   const menuItems = [
-    { key: '/chat', icon: <MessageOutlined />, label: 'Chat' },
-    { key: '/history', icon: <HistoryOutlined />, label: 'History' },
+    { key: '/chat', icon: <MessageOutlined />, label: t('nav_chat') },
+    { key: '/history', icon: <HistoryOutlined />, label: t('nav_history') },
     ...(user?.is_hr_admin
-      ? [{ key: '/admin/knowledge', icon: <BookOutlined />, label: 'Knowledge Base' }]
+      ? [{ key: '/admin/knowledge', icon: <BookOutlined />, label: t('nav_knowledge') }]
       : []),
-    { key: '/profile', icon: <UserOutlined />, label: 'Profile' },
+    { key: '/profile', icon: <UserOutlined />, label: t('nav_profile') },
   ];
 
   const userMenu = {
@@ -35,7 +37,7 @@ export default function AppLayout() {
       {
         key: 'logout',
         icon: <LogoutOutlined />,
-        label: 'Logout',
+        label: t('logout'),
         onClick: async () => {
           await logout();
           navigate('/login');
@@ -43,6 +45,9 @@ export default function AppLayout() {
       },
     ],
   };
+
+  // Normalize root path to /chat for menu highlight (since index route redirects to /chat)
+  const selectedKey = location.pathname === '/' ? '/chat' : location.pathname;
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -85,7 +90,7 @@ export default function AppLayout() {
         </div>
         <Menu
           mode="inline"
-          selectedKeys={[location.pathname]}
+          selectedKeys={[selectedKey]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
           style={{ border: 'none' }}
@@ -103,13 +108,12 @@ export default function AppLayout() {
           lineHeight: '56px',
           transition: 'background 0.3s ease, border-color 0.3s ease',
         }}>
-          {/* Dark mode toggle */}
           <Button
             type="text"
             icon={isDark ? <SunOutlined /> : <MoonOutlined />}
             onClick={() => setThemeMode(isDark ? 'light' : 'dark')}
             style={{ marginRight: 16, color: 'var(--color-text-secondary)' }}
-            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            title={isDark ? t('switch_to_light') : t('switch_to_dark')}
           />
           <Dropdown menu={userMenu}>
             <Space style={{ cursor: 'pointer' }}>

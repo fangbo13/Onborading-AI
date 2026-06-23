@@ -45,11 +45,12 @@ class ChatSessionListCreateView(generics.ListCreateAPIView):
     serializer_class = ChatSessionSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None  # Sessions list is small per user
+    ordering = '-updated_at'  # Most recent first
 
     def get_queryset(self):
         return ChatSession.objects.filter(
             user=self.request.user, is_active=True
-        )
+        ).order_by('-updated_at')
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)

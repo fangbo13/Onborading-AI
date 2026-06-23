@@ -1,3 +1,4 @@
+﻿import { useTranslation } from 'react-i18next';
 import { Row, Col, Typography, Card } from 'antd';
 import {
   LaptopOutlined,
@@ -20,6 +21,8 @@ const quickActions = [
 ];
 
 export default function WelcomeScreen({ onQuickAction }: { onQuickAction: (q: string) => void }) {
+  const { t } = useTranslation('chat');
+
   return (
     <div style={{ animation: 'fadeInUp 0.4s ease-out' }}>
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
@@ -48,15 +51,15 @@ export default function WelcomeScreen({ onQuickAction }: { onQuickAction: (q: st
           marginTop: 8,
           fontFamily: 'var(--font-family-display)',
         }}>
-          Onboarding Assistant
+          {t('title')}
         </Title>
         <Text type="secondary" style={{ display: 'block', maxWidth: 480, margin: '0 auto' }}>
-          Hi! I&apos;m your EY Onboarding Assistant. Ask me anything about your onboarding process, company policies, benefits, and more.
+          {t('welcome_message')}
         </Text>
       </div>
 
       <Card
-        title="Common Questions"
+        title={t('quick_actions_title')}
         bordered={false}
         style={{
           background: 'var(--color-bg-container, white)',

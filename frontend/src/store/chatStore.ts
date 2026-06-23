@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { chatApi } from '../api/chat';
 import { getAuthToken } from '../api/client';
 
@@ -32,6 +32,8 @@ interface ChatState {
   isStreaming: boolean;
   streamContent: string;
   citations: Citation[];
+  isLoadingMessages: boolean;
+  sendError: string | null;
 
   // Actions
   setActiveSession: (id: string) => void;
@@ -39,7 +41,9 @@ interface ChatState {
   updateStreamContent: (content: string) => void;
   setStreaming: (isStreaming: boolean) => void;
   setStreamCitations: (citations: Citation[]) => void;
+  setSendError: (error: string | null) => void;
   loadSessions: () => Promise<void>;
+  loadMessages: (sessionId: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   finishStreamingMessage: (messageId: string, sessionId: string) => void;
 }
@@ -51,8 +55,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   isStreaming: false,
   streamContent: '',
   citations: [],
+  isLoadingMessages: false,
+  sendError: null,
 
-  setActiveSession: (id) => set({ activeSessionId: id, messages: [] }),
+  setActiveSession: (id) => set({ activeSessionId: id, messages: [], sendError: null }),
 
   addMessage: (message) => set((state) => ({
     messages: [...state.messages, message],
@@ -64,6 +70,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   setStreamCitations: (citations) => set({ citations }),
 
+  setSendError: (sendError) => set({ sendError }),
+
   loadSessions: async () => {
     try {
       const sessions = await chatApi.getSessions();
@@ -73,16 +81,32 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }
   },
 
+  loadMessages: async (sessionId: string) => {
+    set({ isLoadingMessages: true, sendError: null });
+    try {
+      const msgs = await chatApi.getMessages(sessionId);
+      const messages: Message[] = msgs.map((m: any) => ({
+        id: m.id || crypto.randomUUID(),
+        role: m.role,
+        content: m.content || '',
+        citations: m.citations || [],
+        createdAt: m.created_at || m.createdAt || new Date().toISOString(),
+      }));
+      set({ activeSessionId: sessionId, messages, isLoadingMessages: false });
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+      set({ isLoadingMessages: false, sendError: 'Failed to load messages' });
+    }
+  },
+
   sendMessage: async (content: string) => {
     const { activeSessionId, isStreaming } = get();
 
-    // Prevent double-send (race condition fix M-02)
     if (isStreaming) return;
 
-    // Set streaming BEFORE any async work (race condition fix M-02)
+    set({ sendError: null });
     get().setStreaming(true);
 
-    // Create a new session if none exists
     let sessionId = activeSessionId;
     if (!sessionId) {
       try {
@@ -94,12 +118,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         });
       } catch (error) {
         console.error('Failed to create session:', error);
-        get().setStreaming(false);
+        set({ isStreaming: false, sendError: 'Failed to start conversation' });
         return;
       }
     }
 
-    // Add user message
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -108,7 +131,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     };
     get().addMessage(userMessage);
 
-    // SSE connection with retry (H-01)
     const token = getAuthToken();
     const maxRetries = 2;
 
@@ -160,6 +182,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
                 case 'error':
                   console.error('Stream error:', data.error);
                   get().setStreaming(false);
+                  set({ sendError: data.error || 'Stream error occurred' });
                   return false;
               }
             }
@@ -169,13 +192,21 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       } catch (error) {
         console.error(`Streaming error (attempt ${attempt + 1}):`, error);
         if (attempt < maxRetries) {
-          // Wait with exponential backoff before retry
           const delay = (attempt + 1) * 1000;
           await new Promise((resolve) => setTimeout(resolve, delay));
           return streamWithRetry(attempt + 1);
         }
-        // All retries exhausted
         get().setStreaming(false);
+        const errorMsg = (error as Error).message;
+        if (errorMsg.includes('401')) {
+          set({ sendError: 'Response error: API authentication failed. Please check backend configuration.' });
+        } else if (errorMsg.includes('500')) {
+          set({ sendError: 'Response error: Server error. Please try again later.' });
+        } else if (errorMsg.includes('NetworkError') || errorMsg.includes('fetch')) {
+          set({ sendError: 'Network error. Please check your connection.' });
+        } else {
+          set({ sendError: `Response error: ${errorMsg}` });
+        }
         return false;
       }
     };
@@ -201,7 +232,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       citations: [],
     }));
 
-    // Reload sessions to update the list
     get().loadSessions();
   },
 }));

@@ -1,25 +1,38 @@
+﻿import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
-import { Input, Button, Space } from 'antd';
-import { SendOutlined } from '@ant-design/icons';
+import { Input, Button, Space, Spin, Alert } from 'antd';
+import { SendOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useChatStore } from '../store/chatStore';
 import WelcomeScreen from '../components/chat/WelcomeScreen';
 import MessageBubble from '../components/chat/MessageBubble';
 
 export default function ChatPageContainer() {
+  const { t } = useTranslation('chat');
   const {
     messages,
     isStreaming,
     streamContent,
     citations,
     activeSessionId,
+    isLoadingMessages,
+    sendError,
+    setSendError,
     sendMessage,
+    loadMessages,
   } = useChatStore();
 
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef(null);
+  const loadedSessionRef = useRef<string | null>(null);
 
-  // Auto-scroll: instant during streaming, smooth for completed messages
+  useEffect(() => {
+    if (activeSessionId && activeSessionId !== loadedSessionRef.current) {
+      loadedSessionRef.current = activeSessionId;
+      loadMessages(activeSessionId);
+    }
+  }, [activeSessionId, loadMessages]);
+
   useEffect(() => {
     const container = messagesEndRef.current?.parentElement;
     if (!container) return;
@@ -41,6 +54,14 @@ export default function ChatPageContainer() {
     sendMessage(question);
   };
 
+  const handleRetry = () => {
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (lastUserMsg) {
+      setSendError(null);
+      sendMessage(lastUserMsg.content);
+    }
+  };
+
   if (!activeSessionId && messages.length === 0) {
     return (
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 16px' }}>
@@ -59,13 +80,38 @@ export default function ChatPageContainer() {
       margin: '0 auto',
       width: '100%',
     }}>
-      {/* Messages area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 0' }}>
+        {isLoadingMessages && messages.length === 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
+            <Spin size="large" tip={t('loading_messages') || 'Loading...'} />
+          </div>
+        )}
+
+        {sendError && (
+          <Alert
+            message={t('error_title') || 'Error'}
+            description={sendError}
+            type="error"
+            showIcon
+            closable
+            onClose={() => setSendError(null)}
+            style={{ marginBottom: 16 }}
+            action={
+              <Button
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={handleRetry}
+              >
+                {t('error_retry')}
+              </Button>
+            }
+          />
+        )}
+
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
 
-        {/* Streaming message */}
         {isStreaming && streamContent && (
           <MessageBubble
             message={{
@@ -79,7 +125,6 @@ export default function ChatPageContainer() {
           />
         )}
 
-        {/* Thinking indicator - animated dots */}
         {isStreaming && !streamContent && (
           <div style={{
             padding: '16px 24px',
@@ -100,7 +145,7 @@ export default function ChatPageContainer() {
               ))}
             </div>
             <span style={{ color: 'var(--color-text-tertiary)', fontSize: 13, fontWeight: 500 }}>
-              Thinking...
+              {t('thinking')}
             </span>
           </div>
         )}
@@ -108,7 +153,6 @@ export default function ChatPageContainer() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area - floating bar style */}
       <div style={{
         padding: '16px 24px 24px',
         background: 'var(--color-bg-container)',
@@ -121,7 +165,7 @@ export default function ChatPageContainer() {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onPressEnter={handleSend}
-            placeholder="Type your question here..."
+            placeholder={t('placeholder')}
             disabled={isStreaming}
             size="large"
             maxLength={4000}
@@ -132,9 +176,9 @@ export default function ChatPageContainer() {
             onClick={handleSend}
             disabled={!inputValue.trim() || isStreaming}
             size="large"
-            style={{ minWidth: 56, padding: '0 20px', fontWeight: 600 }}
+            style={{ minWidth: 56, padding: inputValue.trim() ? '0 16px' : '0 20px', fontWeight: 600 }}
           >
-            {inputValue.trim() ? '' : 'Send'}
+            {inputValue.trim() ? '' : t('send')}
           </Button>
         </Space.Compact>
       </div>

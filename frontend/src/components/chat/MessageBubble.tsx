@@ -1,3 +1,4 @@
+﻿import { useTranslation } from 'react-i18next';
 import { Card, Typography, Space } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import type { Message } from '../../store/chatStore';
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function MessageBubble({ message, isStreaming = false }: Props) {
+  const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
 
   return (
@@ -28,7 +30,6 @@ export default function MessageBubble({ message, isStreaming = false }: Props) {
           padding: isUser ? '0' : '0',
         }}
       >
-        {/* Message bubble */}
         <Card
           className={!isUser ? 'msg-bubble-assistant' : undefined}
           style={{
@@ -73,10 +74,9 @@ export default function MessageBubble({ message, isStreaming = false }: Props) {
           )}
         </Card>
 
-        {/* Citations */}
         {!isUser && message.citations && message.citations.length > 0 && (
           <div style={{ marginTop: 8 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>Sources:</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{t('sources')}</Text>
             <Space wrap style={{ marginTop: 4 }}>
               {message.citations.map((cit, i) => (
                 <Card
@@ -92,7 +92,7 @@ export default function MessageBubble({ message, isStreaming = false }: Props) {
                   <Text strong ellipsis style={{ maxWidth: '100%', display: 'block' }}>
                     {cit.document_title}
                   </Text>
-                  {cit.page_number && <Text> · p.{cit.page_number}</Text>}
+                  {cit.page_number && <Text> 路 p.{cit.page_number}</Text>}
                   <br />
                   <Text type="secondary" style={{ fontSize: 11 }}>
                     Score: {cit.score}

@@ -1,4 +1,4 @@
-{
+﻿{
   "app_name": "EY Onboarding AI",
   "nav_chat": "Chat",
   "nav_history": "History",
@@ -7,5 +7,9 @@
   "login": "Login",
   "logout": "Logout",
   "welcome": "Welcome, {{name}}",
-  "language": "Language"
+  "language": "Language",
+  "switch_to_light": "Switch to Light Mode",
+  "switch_to_dark": "Switch to Dark Mode",
+  "error_title": "Error",
+  "error_retry": "Retry"
 }
