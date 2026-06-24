@@ -359,6 +359,7 @@ body {
 .msg-bubble-wrapper:hover .msg-copy-btn,
 .msg-bubble-wrapper .msg-copy-btn:hover {
   opacity: 1 !important;
+  transform: scale(1) !important;
 }
 
 /* Touch devices: always show action buttons (no hover state) */
@@ -836,4 +837,49 @@ body {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
+/* ============================================
+   Iteration 9: Sidebar Polish & Scrollbar
+   ============================================ */
+
+/* Hide scrollbar in sidebar scroll area (keep scrollable) */
+.sidebar-scroll-area {
+  scrollbar-width: none; /* Firefox */
+}
+
+.sidebar-scroll-area::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
+/* Sidebar header icon buttons */
+.sidebar-header-icon:hover {
+  color: var(--color-text) !important;
+  background: var(--color-fill) !important;
+}
+
+.sidebar-header-icon:active {
+  background: var(--color-fill-secondary) !important;
+}
+
+/* Sidebar chat item hover — CSS only, no inline JS */
+.sidebar-chat-item:not([data-active="true"]):hover {
+  background: var(--color-fill) !important;
+}
+
+.sidebar-chat-item:hover .sidebar-more-btn {
+  opacity: 1 !important;
+}
+
+.sidebar-more-btn:hover {
+  opacity: 1 !important;
+  background: var(--color-fill) !important;
+}
+
+/* Sidebar user area hover — CSS only */
+.sidebar-user-area:hover {
+  background: var(--color-fill) !important;
+}
+
+.sidebar-user-area:active {
+  background: var(--color-fill-secondary) !important;
+}
 

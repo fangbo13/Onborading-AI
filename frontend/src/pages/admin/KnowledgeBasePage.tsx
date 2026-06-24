@@ -105,12 +105,12 @@ export default function KnowledgeBasePage() {
   };
 
   const columns: ColumnsType<Document> = [
-    { title: 'Title', dataIndex: 'title', key: 'title', ellipsis: true },
-    { title: 'Category', dataIndex: 'category_name', key: 'category', width: 120 },
-    { title: 'Type', dataIndex: 'file_type', key: 'file_type', width: 80 },
-    { title: 'Chunks', dataIndex: 'chunk_count', key: 'chunk_count', width: 80 },
+    { title: t('kb_title'), dataIndex: 'title', key: 'title', ellipsis: true },
+    { title: t('kb_category'), dataIndex: 'category_name', key: 'category', width: 120 },
+    { title: t('kb_type'), dataIndex: 'file_type', key: 'file_type', width: 80 },
+    { title: t('kb_chunks'), dataIndex: 'chunk_count', key: 'chunk_count', width: 80 },
     {
-      title: 'Status',
+      title: t('kb_status'),
       dataIndex: 'status',
       key: 'status',
       width: 120,
@@ -120,9 +120,9 @@ export default function KnowledgeBasePage() {
         </Tag>
       ),
     },
-    { title: 'Created', dataIndex: 'created_at', key: 'created_at', width: 180 },
+    { title: t('kb_created'), dataIndex: 'created_at', key: 'created_at', width: 180 },
     {
-      title: 'Actions',
+      title: t('kb_actions'),
       key: 'actions',
       width: 150,
       render: (_: unknown, record: Document) => (

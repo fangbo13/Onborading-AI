@@ -196,6 +196,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const maxRetries = 2;
 
     const streamWithRetry = async (attempt: number): Promise<boolean> => {
+      // P0-4/#17: SSE timeout monitoring — declared at function scope for cleanup
+      let thinkingCheckInterval: ReturnType<typeof setInterval> | undefined;
       try {
         const response = await fetch(`/api/v1/chat/sessions/${sessionId}/send/`, {
           method: 'POST',
@@ -216,9 +218,32 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         let assistantContent = '';
         let currentEvent = '';
 
+        // P0-4/#17: SSE timeout monitoring — show "thinking" prompt after 10s idle, abort after 30s
+        let lastTokenTime = Date.now();
+        const THINKING_THRESHOLD = 10000; // 10s — show thinking prompt
+        const ABORT_THRESHOLD = 30000;   // 30s — abort stream
+        let thinkingShown = false;
+        thinkingCheckInterval = setInterval(() => {
+          const elapsed = Date.now() - lastTokenTime;
+          if (elapsed > THINKING_THRESHOLD && !thinkingShown && get().isStreaming) {
+            thinkingShown = true;
+            // Append a "still thinking..." indicator to stream content
+            get().updateStreamContent(assistantContent + '\n\n⏳ _仍在思考中..._');
+          }
+          if (elapsed > ABORT_THRESHOLD && get().isStreaming) {
+            clearInterval(thinkingCheckInterval);
+            reader.cancel();
+            get().setStreaming(false);
+            set({ sendError: 'Stream timed out — no response for 30 seconds' });
+          }
+        }, 3000);
+
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            clearInterval(thinkingCheckInterval); // #17: SSE timeout cleanup
+            break;
+          }
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
@@ -231,6 +256,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               const data = JSON.parse(line.slice(6));
               switch (currentEvent) {
                 case 'token':
+                  lastTokenTime = Date.now(); // #17: SSE timeout — reset idle timer on token
+                  if (thinkingShown) {
+                    thinkingShown = false;
+                    // Remove the "still thinking..." indicator
+                    get().updateStreamContent(assistantContent);
+                  }
                   assistantContent += data.token || '';
                   get().updateStreamContent(assistantContent);
                   break;
@@ -238,9 +269,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
                   get().setStreamCitations(data);
                   break;
                 case 'done':
+                  clearInterval(thinkingCheckInterval); // #17: SSE timeout cleanup
                   get().finishStreamingMessage(data.message_id, data.session_id);
                   return true;
                 case 'error':
+                  clearInterval(thinkingCheckInterval); // #17: SSE timeout cleanup
                   console.error('Stream error:', data.error);
                   get().setStreaming(false);
                   set({ sendError: data.error || 'Stream error occurred' });
@@ -251,6 +284,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         }
         return true;
       } catch (error) {
+        if (thinkingCheckInterval) clearInterval(thinkingCheckInterval);
         console.error(`Streaming error (attempt ${attempt + 1}):`, error);
         if (attempt < maxRetries) {
           const delay = (attempt + 1) * 1000;

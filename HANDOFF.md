@@ -69,7 +69,7 @@
 **TypeScript**: 0 新增错误  
 **Code Review**: 5 关键文件审查完成，修复 2 个中等问题（context menu 定位 + 错误提示过渡可见性）
 
-### ✅ 迭代 9 — DeepSeek 1:1 界面复刻
+### ✅ 迭代 9 — DeepSeek 1:1 界面复刻（已完成）
 
 **核心变更：侧边栏纯对话列表，无导航菜单**
 - 删除侧边栏 `Menu` 组件和 `menuItems` 数组（移除对话/历史/知识库导航）
@@ -85,10 +85,22 @@
 - Onboarding Modal 保留但简化（去掉 history 引用，footer 仅 "开始使用" 按钮）
 - 移动端 Drawer 同步更新
 
-**新增 i18n keys**（4 个）:
+**CSS 微调与 hover 优化（迭代 9 补充）**:
+- 侧边栏滚动区隐藏滚动条（`.sidebar-scroll-area` — `scrollbar-width: none` + `::-webkit-scrollbar { display: none }`）
+- 侧边栏顶栏右侧添加搜索图标（`SearchOutlined`，点击聚焦搜索框）+ 布局图标（`AppstoreOutlined`，占位）
+- `sidebar-chat-item` hover 从 inline JS → 纯 CSS class（`.sidebar-chat-item:hover`）
+- `sidebar-more-btn` hover 从 inline JS → 纯 CSS class（hover 时 opacity:1 + 背景）
+- `sidebar-user-area` hover 从 inline JS → 纯 CSS class
+- `sidebar-header-icon` hover CSS 效果（背景 + 颜色变化）
+- `MessageBubble` 操作按钮过渡增强：`opacity 0→1 + scale(0.85→1)` 平滑动画，`.msg-action-btn-group` class
+- 移动端 Drawer 标题区同步添加搜索+布局图标
+
+**新增 i18n keys**（6 个）:
 - `knowledge_base`: 知识库 / Knowledge Base
 - `user_settings`: 个人设置 / Settings
+- `sidebar_layout`: 布局切换 / Layout
 - `sidebar_new_chat` 修改为: 开启新对话 / Start New Chat
+- `onboarding_subtitle` 修改为: 快速了解各导航功能... / Quick overview...
 
 **TypeScript**: 0 新增错误
 
@@ -343,38 +355,38 @@
 
 ---
 
-### 🔄 迭代 9 — DeepSeek 1:1 界面复刻（进行中）
+### ✅ 迭代 9 — DeepSeek 1:1 界面复刻（已完成）
 
-**当前进度**: 约 80% 完成，主要功能已实现
+**当前进度**: 100% 完成，所有 5 个待办项已完成
 
 **已完成**:
 - ✅ 删除导航菜单（对话/历史/知识库），侧边栏改为纯对话列表
 - ✅ 删除 `/history` 路由，历史功能集成到侧边栏
 - ✅ 侧边栏固定 260px，不再支持折叠（div 替代 Ant Design Sider）
 - ✅ 顶部 Logo 区域（EY 图标 + "Onboarding"）
+- ✅ 侧边栏顶栏右侧搜索图标 + 布局图标（SearchOutlined + AppstoreOutlined）
+- ✅ 搜索图标点击聚焦搜索框（`document.getElementById('sidebar-search-input').focus()`）
 - ✅ 新建对话按钮（白底灰边圆角 "开启新对话"）
 - ✅ 对话列表日期分组（今天/昨天/7 天内/30 天内/更早）
-- ✅ 对话项样式（选中态浅蓝背景，hover 浅灰）
-- ✅ 右侧三点菜单（仅选中项显示，点击弹出操作菜单）
+- ✅ 对话项样式（选中态浅蓝背景，hover 浅灰）— 纯 CSS，无 inline JS
+- ✅ 右侧三点菜单（hover 显示，点击弹出操作菜单）— 纯 CSS hover
 - ✅ 右键菜单（onContextMenu + Popconfirm 删除确认）
-- ✅ 底部用户区（头像 + 用户名 + 三点菜单）
-- ✅ 移动端 Drawer 同步结构
+- ✅ 底部用户区（头像 + 用户名 + 三点菜单）— 纯 CSS hover
+- ✅ 侧边栏滚动区隐藏滚动条（`.sidebar-scroll-area`）
+- ✅ 移动端 Drawer 同步结构（含搜索+布局图标）
 - ✅ Header 用户菜单添加知识库入口（仅管理员）
 - ✅ Tour 简化（移除交互式 Tour，保留 Onboarding Modal）
 - ✅ Skip-to-content 改用 CSS 类
-- ✅ i18n keys 更新（20+ 个，zh/en 同步）
+- ✅ MessageBubble 操作按钮平滑过渡（opacity + scale 动画）
+- ✅ i18n keys 更新（sidebar_layout zh/en）
 
-**待完成**:
-- ⏳ 侧边栏顶栏右侧图标（搜索 + 布局）
--  CSS 样式微调（滚动条隐藏、hover 效果完善）
--  MessageBubble hover 增强
--  验证（TypeScript 检查、浏览器测试、截图）
-- ⏳ 文档更新
+**验证结果**:
+- TypeScript: 0 错误 ✅
+- 浏览器测试: 搜索图标聚焦 ✅，布局图标显示 ✅，sidebar-scroll-area ✅，sidebar-chat-item ✅（39项），sidebar-more-btn ✅（39项），sidebar-user-area ✅，sidebar-header-icon ✅（2个）
 
 **关键文件**:
-- `frontend/src/layout/AppLayout.tsx` — 已大幅重构（核心）
+- `frontend/src/layout/AppLayout.tsx` — 已完全重构
+- `frontend/src/components/chat/MessageBubble.tsx` — hover 增强
+- `frontend/src/styles/globals.css` — CSS class 补充
 - `frontend/src/App.tsx` — /history 路由已删除
-- `frontend/src/styles/globals.css` — 部分样式已添加
 - `frontend/src/i18n/locales/zh|en/common.json` — 已更新
-
-详见 `NEXT_SESSION_PROMPT.md` 完整执行步骤和待办清单。

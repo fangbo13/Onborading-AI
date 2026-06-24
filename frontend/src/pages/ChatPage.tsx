@@ -1,12 +1,28 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Input, Button, Space, Alert, type InputRef } from 'antd';
+import { Input, Button, Space, Alert, type InputRef, message as antMessage } from 'antd';
 const { TextArea } = Input;
 import { SendOutlined, ReloadOutlined, DownOutlined } from '@ant-design/icons';
 import { useChatStore } from '../store/chatStore';
 import WelcomeScreen from '../components/chat/WelcomeScreen';
 import MessageBubble from '../components/chat/MessageBubble';
+
+// P0-4: Online status tracking for send button disable
+function useOnlineStatus() {
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+  return isOnline;
+}
 
 // Throttle helper for scroll optimization
 function throttle<T extends (...args: any[]) => void>(fn: T, limit: number): T {
@@ -39,6 +55,7 @@ function clipForScreenReader(text: string, maxLength: number = 100): string {
 export default function ChatPageContainer() {
   const { t } = useTranslation('chat');
   const location = useLocation();
+  const isOnline = useOnlineStatus(); // P0-4
   const {
     messages,
     isStreaming,
@@ -89,7 +106,8 @@ export default function ChatPageContainer() {
     if (!container) return;
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
     if (isNearBottom || !isStreaming) {
-      throttledScroll(isStreaming ? 'instant' : 'smooth');
+      // P2-#16: Use smooth scroll for all cases; throttle already limits frequency during streaming
+      throttledScroll('smooth');
     }
   }, [messages, streamContent, isStreaming, throttledScroll]);
 
@@ -107,6 +125,11 @@ export default function ChatPageContainer() {
 
   const handleSend = () => {
     if (!inputValue.trim() || isStreaming) return;
+    // P0-4: Block sending when offline
+    if (!navigator.onLine) {
+      antMessage.warning(t('offline_send_warning') || '当前网络不可用，请检查网络连接后重试');
+      return;
+    }
     sendMessage(inputValue.trim());
     setInputValue('');
     inputRef.current?.focus();
@@ -347,7 +370,7 @@ export default function ChatPageContainer() {
                 type="primary"
                 icon={<SendOutlined />}
                 onClick={handleSend}
-                disabled={!inputValue.trim() || isStreaming}
+                disabled={!inputValue.trim() || isStreaming || !isOnline}
                 size="large"
                 style={{
                   minWidth: 44,

@@ -24,5 +24,9 @@
   "copy_message": "复制消息",
   "chat_input_label": "输入你的问题",
   "welcome_tip": "欢迎使用 EY 入职助手！你可以直接在下方输入框中提问，或从「常见问题」中选择快捷问题。",
-  "new_messages": "新消息"
+  "new_messages": "新消息",
+  "offline_send_warning": "当前网络不可用，请检查网络连接后重试",
+  "markdown_error_title": "渲染错误",
+  "markdown_error_desc": "此消息渲染时出现问题",
+  "markdown_error_retry": "重新加载"
 }

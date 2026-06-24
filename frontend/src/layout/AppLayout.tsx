@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate } from 'react-router-dom';
 import {
   Avatar, Dropdown, Button, Drawer, Modal, Card, Typography,
-  Popconfirm, Input,
+  Popconfirm, Input, Tooltip,
 } from 'antd';
 import {
   MessageOutlined,
@@ -19,6 +19,7 @@ import {
   SearchOutlined,
   MoreOutlined,
   MenuUnfoldOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../auth/AuthProvider';
 import { useTheme } from '../hooks/useTheme';
@@ -158,6 +159,12 @@ export default function AppLayout() {
     ],
   }), [currentLang, handleLangChange]);
 
+  // Focus sidebar search input when search icon is clicked
+  const handleSidebarSearchFocus = useCallback(() => {
+    const input = document.getElementById('sidebar-search-input');
+    if (input) input.focus();
+  }, []);
+
   // Onboarding handler
   const handleOnboardingClose = useCallback(() => {
     localStorage.setItem('ey-onboarding-seen', 'true');
@@ -246,68 +253,66 @@ export default function AppLayout() {
       padding: '16px 16px 8px',
       display: 'flex',
       alignItems: 'center',
-      gap: 12,
+      justifyContent: 'space-between',
     }}>
-      <div style={{
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        background: 'linear-gradient(135deg, #0052FF, #4D7CFF)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        boxShadow: '0 2px 8px rgba(0, 82, 255, 0.25)',
-      }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: '#FFFFFF', lineHeight: 1 }}>EY</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          background: 'linear-gradient(135deg, #0052FF, #4D7CFF)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          boxShadow: '0 2px 8px rgba(0, 82, 255, 0.25)',
+        }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: '#FFFFFF', lineHeight: 1 }}>EY</span>
+        </div>
+        <h2 style={{
+          margin: 0,
+          fontSize: 16,
+          fontWeight: 600,
+          color: 'var(--color-text)',
+        }}>Onboarding</h2>
       </div>
-      <h2 style={{
-        margin: 0,
-        fontSize: 16,
-        fontWeight: 600,
-        color: 'var(--color-text)',
-      }}>Onboarding</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Button
+          type="text"
+          size="small"
+          icon={<SearchOutlined style={{ fontSize: 14 }} />}
+          onClick={handleSidebarSearchFocus}
+          aria-label={t('sidebar_search')}
+          className="sidebar-header-icon"
+          style={{ color: 'var(--color-text-secondary)' }}
+        />
+        <Button
+          type="text"
+          size="small"
+          icon={<AppstoreOutlined style={{ fontSize: 14 }} />}
+          aria-label={t('sidebar_layout') || 'Layout'}
+          className="sidebar-header-icon"
+          style={{ color: 'var(--color-text-secondary)' }}
+        />
+      </div>
     </div>
   );
 
-  // Sidebar user area (reused in Drawer)
+  // Sidebar user area — P0-1 fix: removed duplicate Profile entry, only Logout remains
+  // (Profile entry is kept only in the top-right user dropdown per audit recommendation)
   const sidebarUserArea = useMemo(() => {
-    const userMenuItems: any[] = [
-      {
-        key: 'profile',
-        icon: <SettingOutlined />,
-        label: t('user_settings'),
-        onClick: () => {
-          navigate('/profile');
-          setMobileDrawerOpen(false);
-        },
-      },
-      { type: 'divider' as const },
-      {
-        key: 'logout',
-        icon: <LogoutOutlined />,
-        label: t('logout'),
-        onClick: async () => {
-          await logout();
-          navigate('/login');
-          setMobileDrawerOpen(false);
-        },
-      },
-    ];
-
     return (
-      <div style={{
-        padding: '8px 12px',
-        borderTop: '1px solid var(--color-border-secondary)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        cursor: 'pointer',
-        borderRadius: '8px 8px 0 0',
-        transition: 'background 0.15s ease',
-      }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-fill)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      <div
+        className="sidebar-user-area"
+        style={{
+          padding: '8px 12px',
+          borderTop: '1px solid var(--color-border-secondary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          borderRadius: '8px 8px 0 0',
+          transition: 'background 0.15s ease',
+        }}
       >
         <Avatar icon={<UserOutlined />} size="small" />
         <span style={{
@@ -318,16 +323,18 @@ export default function AppLayout() {
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
         }}>{user?.email}</span>
-        <Dropdown menu={{ items: userMenuItems }} placement="topRight" trigger={['click']}>
-          <Button
-            type="text"
-            icon={<MoreOutlined />}
-            size="small"
-            aria-label={t('user_settings')}
-            style={{ color: 'var(--color-text-secondary)', padding: '0 4px' }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </Dropdown>
+        <Button
+          type="text"
+          icon={<LogoutOutlined />}
+          size="small"
+          aria-label={t('logout')}
+          style={{ color: 'var(--color-text-secondary)', padding: '0 4px' }}
+          onClick={async () => {
+            await logout();
+            navigate('/login');
+            setMobileDrawerOpen(false);
+          }}
+        />
       </div>
     );
   }, [user?.email, logout, navigate, t]);
@@ -408,7 +415,11 @@ export default function AppLayout() {
               {/* Group items */}
               {!isCollapsed && groupSessions.map((session) => {
                 const isActive = session.id === activeSessionId;
+                const sessionTitle = session.title || t('new_conversation');
+                // P0-2 / #5 enhancement: tooltip with full title + date info
+                const tooltipContent = `${sessionTitle} · ${new Date(session.updatedAt).toLocaleDateString()}`;
                 return (
+                  <Tooltip title={tooltipContent} placement="right" mouseEnterDelay={0.5}>
                   <div
                     key={session.id}
                     className="sidebar-chat-item"
@@ -438,13 +449,9 @@ export default function AppLayout() {
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                       position: 'relative',
-                      transition: 'background 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.background = 'var(--color-fill)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.background = 'transparent';
+                      transition: 'background 0.15s ease, opacity 0.15s ease',
+                      // P0-2: non-active items reduced opacity per DeepSeek audit
+                      opacity: isActive ? 1 : 0.6,
                     }}
                     role="button"
                     tabIndex={0}
@@ -460,13 +467,15 @@ export default function AppLayout() {
                         type="text"
                         size="small"
                         icon={<MoreOutlined style={{ fontSize: 12 }} />}
+                        className="sidebar-more-btn"
+                        data-active={isActive}
                         style={{
                           padding: '0 4px',
                           height: 24,
                           minWidth: 24,
                           color: 'var(--color-text-tertiary)',
                           opacity: isActive ? 1 : 0,
-                          transition: 'opacity 0.15s ease',
+                          transition: 'opacity 0.15s ease, background 0.15s ease',
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -477,17 +486,10 @@ export default function AppLayout() {
                             y: rect.bottom,
                           });
                         }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.opacity = '1';
-                          e.currentTarget.style.background = 'var(--color-fill)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.opacity = isActive ? '1' : '0';
-                          e.currentTarget.style.background = 'transparent';
-                        }}
                       />
                     </div>
                   </div>
+                </Tooltip>
                 );
               })}
             </div>
@@ -613,14 +615,17 @@ export default function AppLayout() {
           </div>
 
           {/* Conversation list area */}
-          <div style={{
-            borderTop: '1px solid var(--color-border-secondary)',
-            flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            padding: '8px 0',
-          }}>
+          <div
+            className="sidebar-scroll-area"
+            style={{
+              borderTop: '1px solid var(--color-border-secondary)',
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              padding: '8px 0',
+            }}
+          >
             {renderConversationList()}
           </div>
 
@@ -638,15 +643,36 @@ export default function AppLayout() {
           width={280}
           styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
           title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'linear-gradient(135deg, #0052FF, #4D7CFF)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: '#FFFFFF' }}>EY</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: 'linear-gradient(135deg, #0052FF, #4D7CFF)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: '#FFFFFF' }}>EY</span>
+                </div>
+                <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>Onboarding</span>
               </div>
-              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>Onboarding</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<SearchOutlined style={{ fontSize: 14 }} />}
+                  onClick={handleSidebarSearchFocus}
+                  aria-label={t('sidebar_search')}
+                  className="sidebar-header-icon"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                />
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<AppstoreOutlined style={{ fontSize: 14 }} />}
+                  aria-label={t('sidebar_layout') || 'Layout'}
+                  className="sidebar-header-icon"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                />
+              </div>
             </div>
           }
         >
@@ -665,13 +691,15 @@ export default function AppLayout() {
           </div>
 
           {/* Mobile conversation list */}
-          <div style={{
-            borderTop: '1px solid var(--color-border-secondary)',
-            flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            padding: '8px 0',
+          <div
+            className="sidebar-scroll-area"
+            style={{
+              borderTop: '1px solid var(--color-border-secondary)',
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              padding: '8px 0',
           }}>
             {renderConversationList()}
           </div>

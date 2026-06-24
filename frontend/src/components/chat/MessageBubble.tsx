@@ -4,6 +4,7 @@ import { CopyOutlined, CheckOutlined, ShareAltOutlined, ReloadOutlined, DownOutl
 import ReactMarkdown from 'react-markdown';
 import { useState, useRef, useCallback } from 'react';
 import type { Message, Citation } from '../../store/chatStore';
+import ErrorBoundary from '../ErrorBoundary';
 
 const { Text } = Typography;
 
@@ -134,13 +135,14 @@ export default function MessageBubble({ message, isStreaming = false, onRegenera
         {!isUser && (
           <>
           <div
-            className="msg-copy-btn"
+            className="msg-copy-btn msg-action-btn-group"
             style={{
               position: 'absolute',
               top: 8,
               right: 8,
               opacity: 0,
-              transition: 'opacity 0.2s ease',
+              transform: 'scale(0.85)',
+              transition: 'opacity 0.25s ease, transform 0.25s ease',
               zIndex: 1,
               display: 'flex',
               gap: 2,
@@ -256,6 +258,12 @@ export default function MessageBubble({ message, isStreaming = false, onRegenera
               overflowWrap: 'break-word',
               wordBreak: 'break-word',
             }}>
+              {/* P0-3: ErrorBoundary wraps Markdown rendering to prevent single-point crash */}
+              <ErrorBoundary
+                title={t('markdown_error_title') || '渲染错误'}
+                description={t('markdown_error_desc') || '此消息渲染时出现问题'}
+                retryText={t('markdown_error_retry') || '重新加载'}
+              >
               <ReactMarkdown
                 allowedElements={ALLOWED_ELEMENTS}
                 unwrapDisallowed={true}
@@ -270,6 +278,7 @@ export default function MessageBubble({ message, isStreaming = false, onRegenera
                   ),
                 }}
               >{message.content}</ReactMarkdown>
+              </ErrorBoundary>
               {isStreaming && (
                 <span style={{
                   display: 'inline-block',

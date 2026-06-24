@@ -24,5 +24,9 @@
   "copy_message": "Copy message",
   "chat_input_label": "Type your message",
   "welcome_tip": "Welcome to EY Onboarding AI! Type your question below or choose a quick question from Common Questions.",
-  "new_messages": "New messages"
+  "new_messages": "New messages",
+  "offline_send_warning": "Network unavailable. Please check your connection and try again.",
+  "markdown_error_title": "Rendering Error",
+  "markdown_error_desc": "An error occurred while rendering this message",
+  "markdown_error_retry": "Reload"
 }
