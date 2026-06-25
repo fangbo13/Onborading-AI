@@ -3,8 +3,10 @@ import { useEffect, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Input, Button, Space, Alert, type InputRef, message as antMessage } from 'antd';
 const { TextArea } = Input;
-import { SendOutlined, ReloadOutlined, DownOutlined } from '@ant-design/icons';
+import { SendOutlined, ReloadOutlined, DownOutlined, StopOutlined } from '@ant-design/icons';
 import { useChatStore } from '../store/chatStore';
+import { abortActiveStream } from '../stream/StreamLifecycleManager';
+import { cleanupTokenBatcher } from '../stream/TokenBatchRenderer';
 import WelcomeScreen from '../components/chat/WelcomeScreen';
 import VirtualizedMessageList from '../components/chat/VirtualizedMessageList';
 
@@ -94,6 +96,15 @@ export default function ChatPageContainer() {
     loadedSessionRef.current = null;
   }, [location.pathname]);
 
+  // V4.1 BUG-001: Cleanup token batcher on unmount to prevent memory leak.
+  // Module-level singleton (accumulatedContent, rafId, batchCallback) cannot be GC'd
+  // if batchCallback closure holds references to React state. This cleanup cancels
+  // pending rAF and nulls the callback so the closure can be collected.
+  // [Source: V4.1/ui_ux/ui_bug_list_V4.1.md §BUG-001]
+  useEffect(() => {
+    return () => cleanupTokenBatcher();
+  }, []);
+
   useEffect(() => {
     if (activeSessionId && activeSessionId !== loadedSessionRef.current) {
       // P1-5: Show transition state
@@ -146,17 +157,27 @@ export default function ChatPageContainer() {
     return () => observer.disconnect();
   }, [messages.length]); // V3.7: Removed streamContent — only re-observe when new messages arrive
 
+  // V4.1 BUG-002: Local ref guard to prevent double-click firing two sendMessage calls
+  // within one render frame. The React disabled prop on TextArea is batched, so the
+  // button stays enabled for ~16ms after the first click. This ref provides a synchronous
+  // guard that blocks the second click in the same frame.
+  // [Source: V4.1/ui_ux/ui_bug_list_V4.1.md §BUG-002]
+  const isSendingRef = useRef(false);
+
   // V3.5 HIGH-001: handleSend now checks isSendLocked
   const handleSend = () => {
-    if (!inputValue.trim() || isStreaming || isSendLocked) return;
+    if (!inputValue.trim() || isStreaming || isSendLocked || isSendingRef.current) return;
     // P0-4: Block sending when offline
     if (!navigator.onLine) {
       antMessage.warning(t('offline_send_warning') || '当前网络不可用，请检查网络连接后重试');
       return;
     }
+    isSendingRef.current = true;
     sendMessage(inputValue.trim());
     setInputValue('');
     inputRef.current?.focus();
+    // Reset guard after React renders the disabled state (~next frame)
+    requestAnimationFrame(() => { isSendingRef.current = false; });
   };
 
   const handleQuickAction = (question: string) => {
@@ -169,6 +190,16 @@ export default function ChatPageContainer() {
       setSendError(null);
       sendMessage(lastUserMsg.content);
     }
+  };
+
+  // V4.0 UI-HIGH-001: Stop generation handler
+  // Aborts the active SSE stream and preserves the content that was already output.
+  // The AbortError handler in chatStore.ts will save the truncated content as a message.
+  const handleStop = () => {
+    abortActiveStream();   // Terminate SSE fetch — triggers AbortError in chatStore
+    // abortActiveStream triggers the catch block in sendMessage,
+    // which calls flushImmediate() + clearStreamOnComplete() + saves truncated content
+    // No need to call setSendError — abort is intentional, not an error
   };
 
   // V3.5: Load older messages handler for sliding window
@@ -258,7 +289,16 @@ export default function ChatPageContainer() {
             showIcon
             closable
             onClose={() => setSendError(null)}
-            style={{ marginBottom: 16 }}
+            // V4.0 DEFECT-007: Network errors get stronger visual treatment for clearer feedback
+            style={{
+              marginBottom: 16,
+              borderRadius: 8,
+              ...(sendError === 'error_network' ? {
+                border: '2px solid #ff4d4f',
+                background: '#fff2f0',
+                animation: 'slideDown 0.3s ease-out',
+              } : {}),
+            }}
             action={
               <Button
                 size="small"
@@ -366,19 +406,37 @@ export default function ChatPageContainer() {
                   resize: 'none',
                 }}
               />
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={handleSend}
-                disabled={!inputValue.trim() || isStreaming || isSendLocked || !isOnline}  // V3.5 HIGH-001: send lock guard
-                size="large"
-                style={{
-                  minWidth: 44,
-                  height: 44,
-                  borderRadius: 12,
-                  fontWeight: 600,
-                }}
-              />
+              {/* V4.0 UI-HIGH-001: Conditional Stop/Send button */}
+              {isStreaming ? (
+                <Button
+                  type="primary"
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={handleStop}
+                  size="large"
+                  aria-label={t('stop_generation') || '停止生成'}
+                  style={{
+                    minWidth: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    fontWeight: 600,
+                  }}
+                />
+              ) : (
+                <Button
+                  type="primary"
+                  icon={<SendOutlined />}
+                  onClick={handleSend}
+                  disabled={!inputValue.trim() || isSendLocked || !isOnline}  // V3.5 HIGH-001: send lock guard
+                  size="large"
+                  style={{
+                    minWidth: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    fontWeight: 600,
+                  }}
+                />
+              )}
             </Space.Compact>
           </div>
           {/* Character counter */}

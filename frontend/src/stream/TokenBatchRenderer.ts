@@ -76,6 +76,31 @@ export function resetTokenBatcher(): void {
 }
 
 /**
+ * V4.1 BUG-001: Cleanup the batcher for GC — cancel pending rAF and null the callback
+ * reference, but preserve accumulatedContent for AbortError truncated-content preservation.
+ *
+ * Unlike resetTokenBatcher() which clears everything, cleanupTokenBatcher() only releases
+ * the rAF callback closure so it can be garbage collected. This is important because:
+ * - resetTokenBatcher() is called on session switch/reset (user intent to discard)
+ * - cleanupTokenBatcher() is called on component unmount (memory hygiene)
+ *
+ * After cleanup, flushImmediate() will still work if called (it checks batchCallback),
+ * but will silently skip since batchCallback is null — this is safe because by unmount
+ * time the stream has already been aborted or completed.
+ *
+ * [Source: V4.1/ui_ux/ui_bug_list_V4.1.md §BUG-001]
+ */
+export function cleanupTokenBatcher(): void {
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+  batchCallback = null;
+  // Intentionally NOT clearing accumulatedContent —
+  // AbortError handler may need it for truncated message preservation
+}
+
+/**
  * Internal: rAF flush function. Passes the full accumulated content
  * to the callback. The callback (updateStreamContent) replaces streamContent
  * with the complete string, so we do NOT need to track "pending vs flushed" tokens.

@@ -7,6 +7,8 @@ import {
   clearStreamOnComplete,
 } from '../stream/StreamLifecycleManager';
 import { initTokenBatcher, appendToken, flushImmediate, resetTokenBatcher } from '../stream/TokenBatchRenderer';
+// V4.0 DEFECT-008: BroadcastChannel cross-tab sync
+import { broadcastSessionSwitch } from '../sync/crossTabSync';
 
 export interface Message {
   id: string;
@@ -106,6 +108,11 @@ interface ChatState {
   isSendLocked: boolean;
   // V3.6 HIGH-002: Flag to refresh session list only after new session creation
   _pendingSessionRefresh: boolean;
+  // V4.1 BUG-003: Flag to differentiate timeout abort from user-intentional abort.
+  // Set by abortInterval before controller.abort(), checked by AbortError handler.
+  // When true: show timeout error toast + preserve truncated content.
+  // When false (user abort / Stop button): preserve content silently, no error toast.
+  _isTimeoutAbort: boolean;
 
   // Actions
   setActiveSession: (id: string) => void;
@@ -177,11 +184,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   sendError: null,
   isSendLocked: false,
   _pendingSessionRefresh: false,
+  _isTimeoutAbort: false,
 
   // V3.5 CRIT-002: setActiveSession now aborts old stream + resets isStreaming
   setActiveSession: (id) => {
     abortActiveStream(); // Kill old stream to prevent data pollution
     resetTokenBatcher(); // Clear any pending token buffer
+    broadcastSessionSwitch(id); // V4.0 DEFECT-008: notify other tabs of session switch
     set({
       activeSessionId: id,
       messages: [],
@@ -194,6 +203,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       totalRoundCount: 0,
       visibleRoundCount: DEFAULT_VISIBLE_ROUNDS,
       _pendingSessionRefresh: false,
+      _isTimeoutAbort: false,
     });
   },
 
@@ -201,6 +211,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   resetSession: () => {
     abortActiveStream(); // Kill stream on new chat
     resetTokenBatcher();
+    broadcastSessionSwitch(null); // V4.0 DEFECT-008: notify other tabs (null = no active session)
     set({
       activeSessionId: null,
       messages: [],
@@ -213,6 +224,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       totalRoundCount: 0,
       visibleRoundCount: DEFAULT_VISIBLE_ROUNDS,
       _pendingSessionRefresh: false,
+      _isTimeoutAbort: false,
     });
   },
 
@@ -321,17 +333,17 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   sendMessage: async (content: string) => {
-    // V3.5 HIGH-001: Check both isStreaming and isSendLocked
-    const currentPhase = get().streamPhase;
-    const { isSendLocked } = get();
-    if (currentPhase !== 'idle' || isSendLocked) return;
+    // V4.1 BUG-002: Atomic check+lock — combine streamPhase/isSendLocked check and
+    // lock into a single synchronous set() call to eliminate the gap between read and lock.
+    // Previously: get().streamPhase + get().isSendLocked check → get().lockSend() → set()
+    // This gap allowed double-click to fire two sendMessage calls within one render frame.
+    // Now: single set({ isSendLocked: true, streamPhase: 'connecting' }) if conditions met.
+    // [Source: V4.1/ui_ux/ui_bug_list_V4.1.md §BUG-002]
+    const state = get();
+    if (state.streamPhase !== 'idle' || state.isSendLocked) return;
 
-    // V3.5: Atomic send lock before async gap
-    get().lockSend();
-    set({ sendError: null });
-
-    // V3.5: Unified stream state machine → 'connecting'
-    set({ streamPhase: 'connecting' });
+    // Atomic lock: check + lock in one synchronous operation (no gap between read and write)
+    set({ isSendLocked: true, sendError: null, streamPhase: 'connecting' });
 
     let sessionId = get().activeSessionId;
     if (!sessionId) {
@@ -435,16 +447,24 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         }, 8000);
 
         // Abort timer: cancel stream if no tokens for 30s
+        // V4.1 BUG-003: Route abort through AbortController.abort() instead of reader.cancel().
+        // reader.cancel() throws DOMException with error.name !== 'AbortError', so the catch
+        // block on line ~510 does NOT match the AbortError branch. This means the preserved
+        // content logic never fires for timeout-induced aborts, and truncated content is lost.
+        // controller.abort() causes reader.read() to throw a proper AbortError, which IS
+        // caught by the correct branch that preserves truncated content.
+        // [Source: V4.1/ui_ux/ui_bug_list_V4.1.md §BUG-003]
         abortInterval = setInterval(() => {
           const elapsed = Date.now() - lastTokenTime;
           if (elapsed > ABORT_THRESHOLD && get().streamPhase !== 'idle') {
             clearAllTimers();
-            reader.cancel();
-            flushImmediate(); // Flush any pending tokens
-            set({ streamPhase: 'error', sendError: 'error_timeout' });
-            get().unlockSend();
-            // Reset to idle after error is shown
-            setTimeout(() => set({ streamPhase: 'idle' }), 100);
+            // V4.1 BUG-003: Mark this as a timeout abort so the AbortError handler
+            // can show appropriate feedback (timeout error toast) vs user-intentional abort
+            // (Stop button — silent, preserves truncated content).
+            set({ _isTimeoutAbort: true });
+            controller.abort(); // V4.1 BUG-003: Use AbortController instead of reader.cancel()
+            // No inline cleanup needed — AbortError catch branch will handle:
+            // flushImmediate() + clearStreamOnComplete() + truncated content preservation + unlockSend
           }
         }, 3000);
 
@@ -504,12 +524,41 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
         // V3.5 CRIT-001: Handle AbortError — stream was intentionally aborted
         if (error instanceof DOMException && error.name === 'AbortError') {
-          // Stream was intentionally aborted (session switch/delete/reset)
-          // Do NOT set sendError, do NOT retry
+          // V4.1 BUG-003: Differentiate timeout abort vs user-intentional abort (Stop button).
+          // Timeout abort: controller.abort() called by abortInterval → show timeout error toast.
+          // User abort: abortActiveStream() called by Stop button → preserve content silently.
+          const isTimeout = get()._isTimeoutAbort;
+
+          // V4.0 UI-HIGH-001: Preserve already-output content as a truncated message
+          // instead of discarding it. This supports both "Stop Generation" button and
+          // timeout aborts — the partial AI response should remain visible.
           flushImmediate();
           clearStreamOnComplete();
-          set({ streamPhase: 'idle', streamContent: '', citations: [] });
+          const preservedContent = get().streamContent;
+          const preservedCitations = get().citations;
+          if (preservedContent && preservedContent.trim()) {
+            const truncatedMessage: Message = {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: preservedContent,
+              citations: preservedCitations,
+              createdAt: new Date().toISOString(),
+            };
+            get().addMessage(truncatedMessage);
+          }
+          // V4.1 BUG-003: Clear timeout flag after processing
+          set({
+            streamPhase: isTimeout ? 'error' : 'idle',
+            streamContent: '',
+            citations: [],
+            sendError: isTimeout ? 'error_timeout' : null,
+            _isTimeoutAbort: false,
+          });
           get().unlockSend();
+          // For timeout, reset to idle after error is shown
+          if (isTimeout) {
+            setTimeout(() => set({ streamPhase: 'idle' }), 100);
+          }
           return false; // Return false but don't treat as error
         }
 
