@@ -59,7 +59,33 @@ services:
       dockerfile: Dockerfile
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.docker
-    command: celery -A config worker -l info -c 4
+    # V4.2 SYS-V4.2-013: Dual queue routing — critical tasks (crawl) and default tasks (ingest)
+    # Previous: single worker with -c 4 — all tasks compete equally for slots.
+    # Large file ingest tasks could block ALL 4 slots for 5 minutes, causing
+    # crawl tasks to queue indefinitely. Now: 2 queues, 2 workers each.
+    # critical queue: fast tasks (crawl, reindex) — 2 dedicated slots
+    # default queue: slow tasks (ingest) — 2 dedicated slots
+    # This ensures crawl tasks always have available slots even when ingest is busy.
+    command: celery -A config worker -l info -Q critical,default -c 2 -n critical@%h
+    volumes:
+      - ./backend:/app
+      - media_volume_sys:/app/media
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-worker-default:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.docker
+    # V4.2 SYS-V4.2-013: Default queue worker — handles slow ingest tasks
+    command: celery -A config worker -l info -Q default -c 2 -n default@%h
     volumes:
       - ./backend:/app
       - media_volume_sys:/app/media
@@ -72,17 +98,13 @@ services:
         condition: service_healthy
 
   frontend:
+    # V4.2 SYS-V4.2-011: Multi-stage Dockerfile — production build + nginx serve
+    # Previous: dev server (npm run dev) — no minification, HMR exposed, source maps accessible
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    environment:
-      VITE_PROXY_TARGET: http://backend:8000
-    command: npm run dev -- --host 0.0.0.0
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     ports:
-      - "3030:3000"
+      - "3030:80"
     depends_on:
       - backend
 

@@ -229,27 +229,27 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   // V3.6 MED-001 / V3.7 P1.3: addMessage now prunes allMessages when exceeding MAX cap
-  // V3.7: Added verification log for memory optimization validation
+  // V4.2 SYS-V4.2-016: Removed computeRounds() from addMessage — it was redundant
+  // because finishStreamingMessage() always recomputes rounds from allMessages.
+  // Previously: addMessage called computeRounds() in prune path, then
+  // finishStreamingMessage() called computeRounds() again = 2 calls per completed message.
+  // Now: addMessage only appends/prunes raw arrays (no round computation).
+  // finishStreamingMessage() is the sole point that computes rounds + visibleMessages.
   addMessage: (message) => set((state) => {
     const newAllMessages = [...state.allMessages, message];
     // Prune front if exceeding cap — prevents unbounded memory growth
+    // V4.2 SYS-V4.2-016: No computeRounds here — just prune raw array
     if (newAllMessages.length > MAX_ALL_MESSAGES) {
       const pruned = newAllMessages.slice(newAllMessages.length - MAX_ALL_MESSAGES);
-      const rounds = computeRounds(pruned);
-      const visibleMessages = extractVisibleMessages(rounds, state.visibleRoundCount);
-      // V3.7 P1.3: Verification log — proves memory is capped during testing
-      // Dev-only: can be removed before production release
-      console.log(`[V3.7 P1.3] addMessage pruning: allMessages=${pruned.length} (cap=${MAX_ALL_MESSAGES}), visibleMessages=${visibleMessages.length}`);
       return {
-        messages: visibleMessages,
+        // V4.2 SYS-V4.2-016: messages will be recomputed in finishStreamingMessage()
+        // For now, just append to visible messages (interim state during streaming)
+        messages: [...state.messages, message],
         allMessages: pruned,
-        hasOlderMessages: true, // Older messages exist on server
+        hasOlderMessages: true,
       };
     }
     const newMessages = [...state.messages, message];
-    // V3.7 P1.3: Verification log — proves memory is capped during testing
-    // Dev-only: can be removed before production release
-    console.log(`[V3.7 P1.3] addMessage: allMessages=${newAllMessages.length}, visibleMessages=${newMessages.length}`);
     return {
       messages: newMessages,
       allMessages: newAllMessages,
@@ -383,8 +383,17 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const maxRetries = 2;
 
     // V3.5: Initialize token batch renderer for this stream
-    initTokenBatcher((fullContent: string) => {
-      get().updateStreamContent(fullContent);
+    // V4.2 SYS-V4.2-015: Changed from (fullContent: string) to incremental diff mode.
+    // appendTokens mode: only passes new tokens → Zustand appends to existing streamContent
+    // fullContent mode: passes complete string → Zustand replaces streamContent (for flushImmediate)
+    initTokenBatcher((update: { appendTokens: string } | { fullContent: string }) => {
+      if ('appendTokens' in update) {
+        // V4.2 SYS-V4.2-015: Incremental append — reduces per-frame GC pressure
+        set(state => ({ streamContent: state.streamContent + update.appendTokens }));
+      } else {
+        // V4.2 SYS-V4.2-015: Full content replacement (for flushImmediate on done/error/abort)
+        set({ streamContent: update.fullContent });
+      }
     });
 
     const streamWithRetry = async (attempt: number): Promise<boolean> => {

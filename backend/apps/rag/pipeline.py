@@ -1,6 +1,13 @@
-"""RAG Pipeline - Main orchestrator."""
+"""RAG Pipeline - Main orchestrator.
+
+V4.2 SYS-V4.2-014: Added DashScope circuit breaker protection.
+When DashScope API fails 3 times consecutively, the circuit opens
+and returns a degraded response for 30 seconds (half-open recovery).
+This prevents external API failures from blocking the entire server.
+"""
 
 import logging
+import time
 
 from django.conf import settings
 
@@ -10,6 +17,7 @@ from .retriever import PgVectorRetriever
 from .prompt_builder import PromptBuilder
 from .guardrails import GuardrailsService, LiteLLMChatService
 from .config import CHUNK_SIZE, CHUNK_OVERLAP, TOP_K, SIMILARITY_THRESHOLD
+from apps.core.circuit_breaker import dashscope_breaker  # V4.2 SYS-V4.2-014
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +100,27 @@ class RAGPipeline:
             similarity_threshold=SIMILARITY_THRESHOLD,
         )
 
+        # V4.2 SYS-V4.2-014: Circuit breaker check — fail fast if DashScope is down
+        if not dashscope_breaker.allow_request():
+            degraded_msg = (
+                "服务暂时不可用，请稍后重试。" if language == "zh"
+                else "Service temporarily unavailable, please try again later."
+            )
+            logger.warning("DashScope circuit breaker OPEN — returning degraded response")
+            yield {"event": "token", "data": {"token": degraded_msg}}
+            yield {"event": "done", "data": {}}
+            return
+        # Prevents Prompt Injection via malicious content stored in knowledge chunks.
+        # Each chunk's content is checked against guardrails; injection-pattern lines
+        # are stripped to prevent the LLM from following embedded instructions.
+        sanitized_chunks = []
+        for chunk in chunks:
+            content = chunk["content"]
+            if not self.guardrails.check_input(content):
+                content = self._sanitize_content(content)
+            sanitized_chunks.append({**chunk, "content": content})
+        chunks = sanitized_chunks
+
         # Step 2b: If no good results, return fallback
         if not chunks:
             fallback = (
@@ -116,9 +145,26 @@ class RAGPipeline:
             language=language,
         )
 
-        # Step 5: Stream LLM response
-        for token in self.llm.stream_chat(system_prompt, query):
-            yield {"event": "token", "data": {"token": token}}
+        # Step 5: Stream LLM response — V4.2 SYS-V4.2-014: circuit breaker wraps the call
+        # On success: record_success() closes the circuit.
+        # On failure: record_failure() counts toward opening the circuit.
+        llm_success = False
+        try:
+            for token in self.llm.stream_chat(system_prompt, query):
+                llm_success = True  # At least one token received = API is working
+                yield {"event": "token", "data": {"token": token}}
+            # Full success — record it to close/reset the circuit breaker
+            if llm_success:
+                dashscope_breaker.record_success()
+        except Exception as e:
+            # V4.2 SYS-V4.2-014: Record failure to count toward circuit opening
+            dashscope_breaker.record_failure()
+            logger.error("DashScope stream error: %s", e, exc_info=True)
+            degraded_msg = (
+                "服务暂时不可用，请稍后重试。" if language == "zh"
+                else "Service temporarily unavailable, please try again later."
+            )
+            yield {"event": "token", "data": {"token": degraded_msg}}
 
         yield {"event": "done", "data": {}}
 
@@ -135,6 +181,20 @@ class RAGPipeline:
             }
             for chunk in chunks
         ]
+
+    def _sanitize_content(self, content: str) -> str:
+        """Remove injection-pattern lines from retrieved content — V4.1 KB-V4.1-005.
+
+        Checks each line individually against guardrails. Lines that trigger
+        injection detection (system commands, role overrides, etc.) are stripped.
+        If all lines are flagged, returns a truncated safe excerpt.
+        """
+        lines = content.split("\n")
+        clean_lines = [line for line in lines if self.guardrails.check_input(line)]
+        if clean_lines:
+            return "\n".join(clean_lines)
+        # Fallback: if every line was flagged, return truncated content
+        return content[:200] + "..."
 
 
 class DocumentParser:

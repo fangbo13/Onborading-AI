@@ -189,6 +189,9 @@ def send_message(request, session_id):
 
     def event_stream():
         start_time = time.time()
+        # V4.2 SYS-V4.2-014: SSE timeout limit — abort stream if total time exceeds 60s
+        # Prevents runserver from being blocked indefinitely by DashScope failures.
+        SSE_TIMEOUT_SECONDS = 60
         response_tokens = []
         citations_data = []
         client_disconnected = False
@@ -212,6 +215,16 @@ def send_message(request, session_id):
                     yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
                 elif event_type == "token":
+                    # V4.2 SYS-V4.2-014: Check SSE timeout — abort if stream exceeds limit
+                    if time.time() - start_time > SSE_TIMEOUT_SECONDS:
+                        logger.warning(
+                            "SSE timeout for session %s — stream exceeded %ds",
+                            session_id, SSE_TIMEOUT_SECONDS,
+                        )
+                        yield "event: error\n"
+                        yield f"data: {json.dumps({'error': 'stream_timeout'}, ensure_ascii=False)}\n\n"
+                        return
+
                     token = data.get("token", "")
                     response_tokens.append(token)
                     yield "event: token\n"

@@ -7,6 +7,10 @@ even when DEBUG=True.
 AuthenticatedMediaMiddleware (KB-V4.1-007): Requires JWT authentication for
 /media/ URLs, preventing unauthenticated access to uploaded documents when
 DEBUG=True (Django's static() serves media publicly without auth).
+
+RbacCacheMiddleware (V4.2 SYS-V4.2-006): Populates request._rbac_cache on
+each authenticated request so has_permission() + has_role() share the same
+data and avoid 3 separate DB queries per request (N+1 problem).
 """
 
 import logging
@@ -107,3 +111,38 @@ class AuthenticatedMediaMiddleware:
                 )
 
         return self.get_response(request)
+
+
+class RbacCacheMiddleware:
+    """Populate request._rbac_cache for authenticated users — V4.2 SYS-V4.2-006.
+
+    Without this middleware, each has_permission() + has_role() call makes
+    independent DB queries (2 for has_permission via get_permissions, 1 for
+    has_role via UserRole filter = 3 queries per request).
+
+    With this middleware, both calls share the same cached data dict:
+    {"permissions": set, "roles": set}, populated on first access.
+    This reduces RBAC DB queries from 3/request to 0-1/request.
+
+    The cache is set on request.user._rbac_cache, which is the User model
+    instance attached to the request by AuthenticationMiddleware.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Only set cache for authenticated users with a User model instance
+        if hasattr(request, "user") and request.user.is_authenticated:
+            # V4.2 SYS-V4.2-006: Initialize RBAC cache dict
+            # Permissions and roles will be lazily populated by
+            # User.get_permissions() on first access.
+            request.user._rbac_cache = {"permissions": None, "roles": None}
+
+        response = self.get_response(request)
+
+        # Clear cache after response (prevent stale data between requests)
+        if hasattr(request, "user") and hasattr(request.user, "_rbac_cache"):
+            request.user._rbac_cache = None
+
+        return response

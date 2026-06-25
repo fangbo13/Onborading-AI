@@ -139,25 +139,32 @@ export default function ChatPageContainer() {
 
   // IntersectionObserver to detect if user scrolled away from bottom
   // V4.1 BUG-017: Changed from threshold:0.1 to rootMargin:'0px 0px 100px 0px'.
-  // rootMargin extends the intersection root by 100px below, so the sentinel is
-  // "intersecting" when the user is within 100px of the bottom. This matches the
-  // previous heuristic threshold (<100px) but uses a single, reliable mechanism.
-  // [Source: V4.1/ui_ux/ui_bug_list_V4.1.md §BUG-017]
+  // V4.2 SYS-V4.2-018: Only trigger forceUpdate when isNearBottom value CHANGES.
+  // Previous: forceUpdate(prev => prev + 1) on every IntersectionObserver callback,
+  // even when isNearBottom didn't change → ~60/sec unnecessary React renders during streaming.
+  // Now: track previous value in a ref and only call forceUpdate when the value flips.
+  // This reduces IntersectionObserver-triggered renders from ~60/sec to ~0-2/sec
+  // (only when user actually scrolls near/away from bottom).
+  const prevIsNearBottomRef = useRef(true);
   useEffect(() => {
     const sentinel = messagesEndRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        isNearBottomRef.current = entry.isIntersecting;
-        // Only trigger re-render for "scroll to bottom" button visibility
-        // when the value actually changes (not every streamContent frame)
-        forceUpdate(prev => prev + 1);
+        const newIsNearBottom = entry.isIntersecting;
+        // V4.2 SYS-V4.2-018: Only trigger re-render when value actually changes
+        if (prevIsNearBottomRef.current !== newIsNearBottom) {
+          prevIsNearBottomRef.current = newIsNearBottom;
+          isNearBottomRef.current = newIsNearBottom;
+          forceUpdate(prev => prev + 1);
+        } else {
+          // Value unchanged — just update the ref, no React re-render
+          isNearBottomRef.current = newIsNearBottom;
+        }
       },
       { root: sentinel.parentElement ?? undefined, rootMargin: '0px 0px 100px 0px' }
     );
     observer.observe(sentinel);
-    // V3.7: Log Observer creation for verification (should only appear once per session)
-    console.log('[V3.7 P1.2] IntersectionObserver created — this should log only once per session');
     return () => observer.disconnect();
   }, [messages.length]); // V3.7: Removed streamContent — only re-observe when new messages arrive
 

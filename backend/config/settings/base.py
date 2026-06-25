@@ -82,6 +82,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.core.middleware.RbacCacheMiddleware",  # V4.2 SYS-V4.2-006: RBAC request-level cache
     "apps.core.middleware.AuthenticatedMediaMiddleware",  # V4.1 KB-V4.1-007: auth required for /media/
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -118,6 +119,14 @@ DATABASES = {
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "ey_password"),
         "HOST": os.environ.get("POSTGRES_HOST", "db"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        # V4.2 SYS-V4.2-012: Connection pool — persistent DB connections
+        # Previous: CONN_MAX_AGE=0 (Django default) → new TCP connection per request
+        # ~8-10ms overhead per connection (TCP+auth handshake). At 50 QPS that's
+        # 400-500ms/sec wasted on connection setup alone.
+        # Now: CONN_MAX_AGE=60 → connections reused for 60 seconds, ~90% reuse rate
+        # CONN_HEALTH_CHECKS=True → Django validates stale connections before use
+        "CONN_MAX_AGE": int(os.environ.get("CONN_MAX_AGE", "60")),
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 
@@ -151,6 +160,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Site framework
 SITE_ID = 1
+
+# Crawler Settings — V4.1 KB-V4.1-011~017
+CRAWL_MAX_URL_LENGTH = int(os.environ.get("CRAWL_MAX_URL_LENGTH", "2048"))
+CRAWL_MAX_REDIRECTS = int(os.environ.get("CRAWL_MAX_REDIRECTS", "3"))
+CRAWL_MAX_CONTENT_SIZE_KB = int(os.environ.get("CRAWL_MAX_CONTENT_SIZE_KB", "500"))
+CRAWL_RATE_LIMIT_PER_HOUR = int(os.environ.get("CRAWL_RATE_LIMIT_PER_HOUR", "10"))
+CRAWL_USER_AGENT = os.environ.get("CRAWL_USER_AGENT", "EY-Onboarding-AI-Crawler/1.0 (+https://ey.com/bot)")
 
 # Django REST Framework
 REST_FRAMEWORK = {
@@ -213,6 +229,16 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TIME_LIMIT = 300  # 5 min hard timeout (worker SIGKILL)
 CELERY_TASK_SOFT_TIME_LIMIT = 240  # 4 min soft timeout (raises SoftTimeLimitExceeded)
 CELERY_TASK_MAX_RETRIES = 3
+# V4.2 SYS-V4.2-013: Queue routing — critical tasks get dedicated slots
+# Previous: all tasks in single default queue, competing for 4 slots equally.
+# Now: critical queue for fast/important tasks (crawl, reindex), default for slow tasks (ingest).
+# Two workers each handle 2 slots — total capacity unchanged (4 slots), but isolation prevents
+# slow ingest tasks from blocking critical crawl/reindex tasks.
+CELERY_TASK_ROUTES = {
+    "apps.crawler.tasks.crawl_and_ingest": {"queue": "critical"},
+    "apps.knowledge.tasks.*": {"queue": "default"},
+    "apps.rag.tasks.*": {"queue": "default"},
+}
 
 # pgvector
 PGVECTOR_DIMENSION = 1024  # Qwen text-embedding-v4

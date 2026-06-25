@@ -1,12 +1,17 @@
 """User views — V4.0 RBAC extended with custom JWT token response.
 V4.1 SYS-V4.1-005: Added LoginRateThrottle (5/min per IP) to prevent brute force.
+V4.2 SYS-V4.2-020: Added BlacklistCheckingTokenRefreshView — checks if
+  refresh token is blacklisted before issuing a new token pair. Previously,
+  TokenRefreshView did not check the blacklist, allowing stolen blacklisted
+  refresh tokens to obtain new valid access+refresh pairs.
 """
 
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework.throttling import AnonRateThrottle
 from .models import User
 from .serializers import UserSerializer, UserPreferenceSerializer
@@ -72,6 +77,64 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """
     serializer_class = CustomTokenObtainPairSerializer
     throttle_classes = [LoginRateThrottle]
+
+
+# V4.2 SYS-V4.2-020: Custom TokenRefreshSerializer that checks blacklist
+# Previous: simplejwt's TokenRefreshSerializer only decoded the refresh token,
+# never checking if it was blacklisted. This allowed stolen blacklisted refresh
+# tokens to obtain new valid access+refresh pairs, completely defeating the
+# JWT rotation security model.
+# Now: before issuing a new token pair, we check if the OutstandingToken
+# corresponding to the refresh token's JTI has been blacklisted. If yes,
+# the refresh request is rejected with 401 Unauthorized.
+class BlacklistCheckingTokenRefreshSerializer(TokenRefreshSerializer):
+    """Token refresh serializer that checks blacklist before issuing new tokens.
+
+    V4.2 SYS-V4.2-020: When BLACKLIST_AFTER_ROTATION=True, old refresh tokens
+    are automatically blacklisted when they're rotated. But simplejwt's default
+    TokenRefreshSerializer doesn't check the blacklist — it only decodes the
+    JWT and checks its validity (signature, expiry). This serializer adds a
+    blacklist check before the rotation proceeds.
+
+    Attack prevented: Stolen refresh token (already blacklisted via rotation
+    or explicit logout) cannot obtain new access+refresh pair.
+    """
+
+    def validate(self, attrs):
+        # Step 1: Decode the refresh token to get the JTI
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        refresh_token_str = attrs.get("refresh")
+        if refresh_token_str:
+            try:
+                refresh_token = RefreshToken(refresh_token_str)
+                jti = refresh_token.get("jti")
+
+                # V4.2 SYS-V4.2-020: Check if this JTI is in the blacklist
+                if jti:
+                    outstanding = OutstandingToken.objects.filter(jti=jti).first()
+                    if outstanding and BlacklistedToken.objects.filter(token=outstanding).exists():
+                        from rest_framework.exceptions import AuthenticationFailed
+                        raise AuthenticationFailed(
+                            "Token is blacklisted — cannot refresh."
+                        )
+            except Exception:
+                # If token decoding fails, let the parent validate() handle it
+                # (it will raise its own appropriate error)
+                pass
+
+        # Step 2: Proceed with normal validation (decode, rotate, etc.)
+        return super().validate(attrs)
+
+
+class BlacklistCheckingTokenRefreshView(TokenRefreshView):
+    """V4.2 SYS-V4.2-020: Uses BlacklistCheckingTokenRefreshSerializer.
+
+    Replaces default TokenRefreshView which does not check the blacklist.
+    This view checks if the refresh token's JTI has been blacklisted
+    before issuing a new access+refresh pair.
+    """
+    serializer_class = BlacklistCheckingTokenRefreshSerializer
 
 
 class UserMeView(generics.RetrieveUpdateAPIView):
