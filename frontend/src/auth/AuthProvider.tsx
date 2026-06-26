@@ -6,6 +6,7 @@ interface User {
   email: string;
   username: string;
   is_hr_admin: boolean;       // Phase 2 dual-authorization: kept for backward compat
+  is_superuser?: boolean;     // V4.0: Admin system domain check in AppLayout
   roles: string[];             // V4.0: ['hr'] or ['admin'] or []
   permissions: string[];       // V4.0: ['document.create', 'category.read', ...]
   language_preference: string;
@@ -21,7 +22,11 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (data: { token: string; user: User }) => void;
+  // P1-1: login accepts Partial<User> for roles/permissions because the login
+  // function enriches the user object by deriving roles from role_level if needed.
+  // LoginPage.tsx may not always include roles/permissions from the profile API,
+  // but the enrichment logic in login() fills in the gaps.
+  login: (data: { token: string; user: Partial<User> & { id: string; email: string } }) => void;
   logout: () => Promise<boolean>;
 }
 
@@ -61,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { isAuthenticated: false, user: null, token: null };
   });
 
-  const login = useCallback(({ token, user }: { token: string; user: User }) => {
+  const login = useCallback(({ token, user }: { token: string; user: Partial<User> & { id: string; email: string } }) => {
     // V4.0: Ensure roles/permissions are present (backend now provides them)
     // P1-1: Also derive roles from role_level if roles array is empty.
     // Some backend responses return role_level='admin' but roles=[], which
@@ -83,9 +88,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const enrichedUser: User = {
-      ...user,
+      id: user.id,
+      email: user.email,
+      username: user.username ?? '',
+      is_hr_admin: user.is_hr_admin ?? false,
+      is_superuser: user.is_superuser ?? false,
       roles: derivedRoles,
       permissions: user.permissions || [],
+      language_preference: user.language_preference ?? 'zh',
+      service_line: user.service_line,
+      office_location: user.office_location,
+      role_level: user.role_level,
     };
     const newState: AuthState = { isAuthenticated: true, user: enrichedUser, token };
     setState(newState);

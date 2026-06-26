@@ -8,7 +8,7 @@ for copyright compliance.
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Card, Table, Tag, Button, Space, Typography, Input, Switch,
-  Modal, message, Tooltip, Spin, Alert, Form,
+  Modal, message, Tooltip, Spin,
 } from 'antd';
 import {
   GlobalOutlined, SendOutlined, StopOutlined,
@@ -20,7 +20,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  submitCrawl, listCrawledDocuments, withdrawCrawl, withdrawByURL,
+  submitCrawl, listCrawledDocuments, withdrawCrawl,
   type CrawledDocument, type CrawlRequest,
 } from '../../api/crawler';
 

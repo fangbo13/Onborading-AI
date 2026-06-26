@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Card, Table, Tag, Button, Space, Typography, Spin, message, Descriptions } from 'antd';
 import {
-  UserOutlined, ReloadOutlined, TeamOutlined,
+  ReloadOutlined, TeamOutlined,
   DashboardOutlined, SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ColumnsType } from 'antd/es/table';
 import apiClient from '../../api/client';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface UserRecord {
   id: string;
