@@ -82,6 +82,26 @@ export default function AppLayout() {
   const [onboardingVisible, setOnboardingVisible] = useState(() => {
     return !localStorage.getItem('ey-onboarding-seen');
   });
+  // P0-1: Show skip hint after 5 seconds — prevents modal from feeling like a blocker
+  const [showSkipHint, setShowSkipHint] = useState(false);
+
+  // P0-1: ESC key closes onboarding modal + 5-second skip hint timer
+  useEffect(() => {
+    if (!onboardingVisible) return;
+    // Show "跳过" hint after 5 seconds
+    const skipTimer = setTimeout(() => setShowSkipHint(true), 5000);
+    // ESC key handler
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleOnboardingClose();
+      }
+    };
+    document.addEventListener('keydown', handleEscKey);
+    return () => {
+      clearTimeout(skipTimer);
+      document.removeEventListener('keydown', handleEscKey);
+    };
+  }, [onboardingVisible]);
 
   // Load sessions on mount and periodically
   useEffect(() => {
@@ -707,15 +727,21 @@ export default function AppLayout() {
           >
             {t('onboarding_start')}
           </Button>
-          {/* P2-1: Skip option for users who don't want the guided tour */}
+          {/* P0-1: Skip hint — shows after 5 seconds so the modal doesn't feel stuck */}
           <div style={{ marginTop: 12 }}>
-            <Button
-              type="link"
-              onClick={handleOnboardingClose}
-              style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}
-            >
-              {t('skip_for_now')}
-            </Button>
+            {showSkipHint ? (
+              <Button
+                type="link"
+                onClick={handleOnboardingClose}
+                style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}
+              >
+                {t('skip_for_now')}
+              </Button>
+            ) : (
+              <Text type="secondary" style={{ fontSize: 12, opacity: 0.5 }}>
+                {t('skip_hint_loading') || '提示将在几秒后出现…'}
+              </Text>
+            )}
           </div>
         </div>
       </Modal>

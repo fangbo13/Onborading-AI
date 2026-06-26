@@ -153,5 +153,6 @@
   "kb_status": "状态",
   "kb_created": "创建时间",
   "kb_actions": "操作",
-  "skip_for_now": "暂时跳过"
+  "skip_for_now": "暂时跳过",
+  "skip_hint_loading": "跳过选项将在几秒后出现…"
 }

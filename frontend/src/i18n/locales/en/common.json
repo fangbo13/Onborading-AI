@@ -153,5 +153,6 @@
   "kb_status": "Status",
   "kb_created": "Created",
   "kb_actions": "Actions",
-  "skip_for_now": "Skip for now"
+  "skip_for_now": "Skip for now",
+  "skip_hint_loading": "Skip option will appear in a moment…"
 }
