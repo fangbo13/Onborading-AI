@@ -271,9 +271,14 @@ export default function ChatPageContainer() {
       <div
         ref={scrollContainerRef}
         style={{
+          // V5.0 FIX (blank chat): this must be a flex column so its flex:1 child
+          // (.message-transition) actually receives a height. Without display:flex the
+          // child's flex:1 is ignored → the wrapper collapses → Virtuoso renders at 0
+          // height → the whole message list is invisible (the reported "blank chat").
+          display: 'flex',
+          flexDirection: 'column',
           flex: 1,
-          overflowY: 'auto',
-          paddingBottom: 100, // V4.1 BUG-006: Increased from 80 to match new floating input bottom offset
+          overflow: 'hidden',
           minHeight: 0,
           position: 'relative',
         }}
@@ -342,7 +347,10 @@ export default function ChatPageContainer() {
         {/* P1-5: Transition wrapper for smooth content switching */}
         <div
           className="message-transition"
-          style={{ opacity: isTransitioning ? 0 : 1, transition: 'opacity 0.2s ease', flex: 1, minHeight: 0 }}
+          // V5.0 FIX (blank chat): flex column + minHeight:0 so the Virtuoso list inside
+          // (styled flex:1) gets a bounded height to virtualize against. Without this the
+          // list has no height and shows nothing.
+          style={{ opacity: isTransitioning ? 0 : 1, transition: 'opacity 0.2s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         >
 
         {/* V3.5 HIGH-003: Virtualized message list with sliding window + stream state isolation */}

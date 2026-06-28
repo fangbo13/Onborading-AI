@@ -122,7 +122,7 @@ function MessageBubble({ message, isStreaming = false, disableActions = false, o
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'EY Onboarding AI',
+          title: 'KnowPilot',
           text: message.content,
         });
       } catch {

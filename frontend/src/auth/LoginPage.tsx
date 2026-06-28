@@ -162,7 +162,7 @@ export default function LoginPage() {
                 fontWeight: 400,
                 fontFamily: "'Calistoga', Georgia, serif",
               }}>
-                Onboarding <span className="gradient-text">AI</span>
+                KnowPilot
               </Title>
               <Paragraph style={{
                 color: 'rgba(255,255,255,0.6)',

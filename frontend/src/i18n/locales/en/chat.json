@@ -1,6 +1,6 @@
 ﻿{
-  "title": "Onboarding Assistant",
-  "welcome_message": "Hi! I'm your EY Onboarding Assistant. How can I help you today?",
+  "title": "KnowPilot",
+  "welcome_message": "Hi! I'm your KnowPilot assistant. How can I help you today?",
   "placeholder": "Type your question here...",
   "send": "Send",
   "thinking": "Thinking...",
@@ -27,7 +27,7 @@
   "collapse_sources": "Collapse sources",
   "copy_message": "Copy message",
   "chat_input_label": "Type your message",
-  "welcome_tip": "Welcome to EY Onboarding AI! Type your question below or choose a quick question from Common Questions.",
+  "welcome_tip": "Welcome to KnowPilot! Type your question below or choose a quick question from Common Questions.",
   "new_messages": "New messages",
   "offline_send_warning": "Network unavailable. Please check your connection and try again.",
   "markdown_error_title": "Rendering Error",

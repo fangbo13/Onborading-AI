@@ -25,7 +25,7 @@ const quickActions = [
   { icon: <EnvironmentOutlined />, question: "办公室在哪里，怎么去？", label: "办公位置" },
   { icon: <TeamOutlined />, question: "我的导师/搭档是谁？", label: "我的导师" },
 ];
-
+ 
 interface WelcomeScreenProps {
   onQuickAction: (q: string) => void;
   onSendMessage?: (msg: string) => void;

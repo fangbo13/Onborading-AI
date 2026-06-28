@@ -20,6 +20,8 @@ import {
   MoreOutlined,
   MenuOutlined,
   AppstoreOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../auth/AuthProvider';
 import { useTheme } from '../hooks/useTheme';
@@ -77,6 +79,15 @@ export default function AppLayout() {
   const bp = useBreakpoint();
   const isMobile = bp.sm;
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  // V5.0: Sidebar collapse (desktop). Persists across reloads via localStorage.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
+    () => localStorage.getItem('ey-sidebar-collapsed') === 'true'
+  );
+  useEffect(() => {
+    localStorage.setItem('ey-sidebar-collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+  const toggleSidebarCollapsed = useCallback(() => setSidebarCollapsed(p => !p), []);
 
   // Onboarding modal state (no more interactive tour — nav structure changed)
   const [onboardingVisible, setOnboardingVisible] = useState(() => {
@@ -410,7 +421,7 @@ export default function AppLayout() {
           fontSize: 16,
           fontWeight: 600,
           color: 'var(--color-text)',
-        }}>Onboarding</h2>
+        }}>KnowPilot</h2>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Button
@@ -430,6 +441,18 @@ export default function AppLayout() {
           className="sidebar-header-icon"
           style={{ color: 'var(--color-text-secondary)' }}
         />
+        {/* V5.0: collapse sidebar button */}
+        <Tooltip title={t('collapse_sidebar') || '收起侧栏'} placement="bottom">
+          <Button
+            type="text"
+            size="small"
+            icon={<MenuFoldOutlined style={{ fontSize: 14 }} />}
+            onClick={toggleSidebarCollapsed}
+            aria-label={t('collapse_sidebar') || 'Collapse sidebar'}
+            className="sidebar-header-icon"
+            style={{ color: 'var(--color-text-secondary)' }}
+          />
+        </Tooltip>
       </div>
     </div>
   );
@@ -754,13 +777,17 @@ export default function AppLayout() {
       {/* Desktop Sidebar — DeepSeek pattern: fixed width flex child */}
       {!isMobile && (
         <div style={{
-          width: 260,
+          // V5.0: animate width to 0 when collapsed; overflow:hidden clips content
+          // during the transition so nothing spills into the main area.
+          width: sidebarCollapsed ? 0 : 260,
           flexShrink: 0,
-          borderRight: '1px solid var(--color-border-secondary)',
+          borderRight: sidebarCollapsed ? 'none' : '1px solid var(--color-border-secondary)',
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
           background: 'var(--color-bg-container)',
+          overflow: 'hidden',
+          transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         }}>
           {/* Sidebar header: Logo + icons */}
           {siderHeader}
@@ -818,7 +845,7 @@ export default function AppLayout() {
                   {/* FIX-007: Use CSS variable instead of hardcoded #FFFFFF for dark mode consistency */}
                   <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--color-text-on-accent)' }}>EY</span>
                 </div>
-                <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>Onboarding</span>
+                <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text)' }}>KnowPilot</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Button
@@ -895,6 +922,19 @@ export default function AppLayout() {
           flexShrink: 0,
           transition: 'background 0.3s ease, border-color 0.3s ease',
         }}>
+          {/* V5.0: expand sidebar button — desktop only, shown when collapsed.
+              marginRight:auto keeps it left while the rest stays right-aligned. */}
+          {!isMobile && sidebarCollapsed && (
+            <Tooltip title={t('expand_sidebar') || '展开侧栏'} placement="bottomLeft">
+              <Button
+                type="text"
+                icon={<MenuUnfoldOutlined />}
+                onClick={toggleSidebarCollapsed}
+                aria-label={t('expand_sidebar') || 'Expand sidebar'}
+                style={{ marginRight: 'auto', color: 'var(--color-text-secondary)' }}
+              />
+            </Tooltip>
+          )}
           {/* Mobile hamburger button — P1-3: improved icon + larger touch target */}
           {isMobile && (
             <Button
@@ -966,7 +1006,7 @@ export default function AppLayout() {
           flexDirection: 'column',
         }}>
           <NetworkStatusBanner />
-          <main id="main-content" role="main" style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column' }}>
+          <main id="main-content" role="main" style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
             <ErrorBoundary
               title={t('error_boundary_title')}
               description={t('error_boundary_desc')}
