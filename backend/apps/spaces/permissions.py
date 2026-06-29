@@ -20,8 +20,9 @@ from __future__ import annotations
 
 from django.db.models import Q
 from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.permissions import BasePermission
 
-from .models import KnowledgeSpace, SpaceMembership
+from .models import KnowledgeSpace, OrganizationMembership, SpaceMembership
 
 # ── Space-scoped permission codes ────────────────────────────────────
 SPACE_VIEW = "space.view"
@@ -78,8 +79,13 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     },
 }
 
-# Synthetic role for platform admins / superusers — full access everywhere.
-ROLE_SUPER_ADMIN = "super_admin"
+# Synthetic roles granting full access within a scope.
+ROLE_SUPER_ADMIN = "super_admin"  # platform-wide (superuser / global 'admin')
+ROLE_ORG_ADMIN = "org_admin"  # full access within one organization
+ROLE_BUSINESS_ADMIN = "business_admin"  # full access within one business line
+
+# Roles that bypass the per-role permission matrix (full access in scope).
+_FULL_ACCESS_ROLES = {ROLE_SUPER_ADMIN, ROLE_ORG_ADMIN, ROLE_BUSINESS_ADMIN}
 
 
 def is_platform_admin(user) -> bool:
@@ -94,13 +100,35 @@ def is_platform_admin(user) -> bool:
         return False
 
 
+def admin_scope(user) -> tuple[set, set]:
+    """Return (org_ids, business_line_ids) the user administers.
+
+    org_admin -> the org's id; business_admin -> the business line's id.
+    """
+    if not user or not user.is_authenticated:
+        return set(), set()
+    org_ids: set = set()
+    bl_ids: set = set()
+    rows = OrganizationMembership.objects.filter(user=user).values_list(
+        "role", "organization_id", "business_line_id"
+    )
+    for role, org_id, bl_id in rows:
+        if role == OrganizationMembership.ROLE_ORG_ADMIN:
+            org_ids.add(org_id)
+        elif role == OrganizationMembership.ROLE_BUSINESS_ADMIN and bl_id:
+            bl_ids.add(bl_id)
+    return org_ids, bl_ids
+
+
 def can_create_space(user) -> bool:
     """Who may create a new space (platform-level ``space.create``).
 
-    Phase 1: platform admins / superusers. Org-/business-admin granularity is a
-    future enhancement.
+    Platform admins or any organization admin.
     """
-    return is_platform_admin(user)
+    if is_platform_admin(user):
+        return True
+    org_ids, _ = admin_scope(user)
+    return bool(org_ids)
 
 
 def effective_space_role(user, space: KnowledgeSpace) -> str | None:
@@ -113,6 +141,12 @@ def effective_space_role(user, space: KnowledgeSpace) -> str | None:
         return None
     if is_platform_admin(user):
         return ROLE_SUPER_ADMIN
+    # Org-/business-line admins have full access within their scope.
+    org_ids, bl_ids = admin_scope(user)
+    if space.organization_id in org_ids:
+        return ROLE_ORG_ADMIN
+    if space.business_line_id and space.business_line_id in bl_ids:
+        return ROLE_BUSINESS_ADMIN
     membership = (
         SpaceMembership.objects.filter(space=space, user=user, status="active")
         .only("role", "status", "expires_at")
@@ -130,7 +164,7 @@ def has_space_permission(user, space: KnowledgeSpace, perm: str) -> bool:
     role = effective_space_role(user, space)
     if role is None:
         return False
-    if role == ROLE_SUPER_ADMIN:
+    if role in _FULL_ACCESS_ROLES:
         return True
     # Archived spaces are read-only: deny write/admin perms even to owners.
     if space.status != "active" and perm not in {
@@ -147,8 +181,12 @@ def accessible_spaces(user):
     member_space_ids = SpaceMembership.objects.filter(
         user=user, status="active"
     ).values_list("space_id", flat=True)
+    org_ids, bl_ids = admin_scope(user)
     return KnowledgeSpace.objects.filter(
-        Q(id__in=list(member_space_ids)) | Q(visibility="public_demo", status="active")
+        Q(id__in=list(member_space_ids))
+        | Q(visibility="public_demo", status="active")
+        | Q(organization_id__in=list(org_ids))
+        | Q(business_line_id__in=list(bl_ids))
     ).distinct()
 
 
@@ -186,3 +224,39 @@ def resolve_request_space(request, *, require_perm: str | None = None, required:
     if require_perm and not has_space_permission(request.user, space, require_perm):
         raise PermissionDenied(f"You do not have '{require_perm}' in this space.")
     return space
+
+
+class SpaceDocumentPermission(BasePermission):
+    """Document management gated by the *active space's* permissions (V6.0).
+
+    Maps the HTTP method to a document permission code and checks it against the
+    active space (from the X-Space-Id header). Platform admins bypass. Space
+    owners and knowledge admins can manage their space's documents; members can
+    only view. When no space is selected, only platform admins may proceed.
+
+    Replaces the old global ``IsHROrAdmin`` gate, which could not express
+    "knowledge admin of space X" without granting access to every space.
+    """
+
+    METHOD_PERM = {
+        "GET": DOCUMENT_VIEW,
+        "HEAD": DOCUMENT_VIEW,
+        "OPTIONS": DOCUMENT_VIEW,
+        "POST": DOCUMENT_UPLOAD,
+        "PUT": DOCUMENT_UPDATE,
+        "PATCH": DOCUMENT_UPDATE,
+        "DELETE": DOCUMENT_DELETE,
+    }
+
+    def has_permission(self, request, view) -> bool:
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if is_platform_admin(user):
+            return True
+        # Raises NotFound if a space id is supplied but inaccessible.
+        space = resolve_request_space(request, required=False)
+        if space is None:
+            return False
+        perm = self.METHOD_PERM.get(request.method, DOCUMENT_VIEW)
+        return has_space_permission(user, space, perm)

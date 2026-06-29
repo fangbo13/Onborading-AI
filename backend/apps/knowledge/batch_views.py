@@ -13,7 +13,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 
-from apps.core.permissions import IsHROrAdmin
+from apps.core.permissions import IsHROrAdmin  # noqa: F401 (kept for compatibility)
+from apps.spaces.permissions import SpaceDocumentPermission, is_platform_admin
 from apps.audit.views import create_audit_log
 from apps.knowledge.batch import (
     compute_content_hash,
@@ -95,7 +96,8 @@ class BatchDocumentUploadView(generics.CreateAPIView):
     """
 
     serializer_class = BatchDocumentUploadSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    # V6.0: batch upload requires the space's document.upload permission.
+    permission_classes = [permissions.IsAuthenticated, SpaceDocumentPermission]
     throttle_classes = [DocumentUploadRateThrottle, BatchUploadRateThrottle]
 
     def create(self, request, *args, **kwargs):
@@ -235,7 +237,11 @@ class BatchImportResultDetailView(generics.RetrieveAPIView):
     """V4.2: View batch import result status and details."""
 
     serializer_class = BatchImportResultSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return BatchImportResultRecord.objects.all()
+        # V6.0: users see their own batch results; platform admins see all.
+        qs = BatchImportResultRecord.objects.all()
+        if is_platform_admin(self.request.user):
+            return qs
+        return qs.filter(uploaded_by=self.request.user)

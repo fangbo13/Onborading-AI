@@ -16,11 +16,14 @@ from rest_framework.test import APITestCase
 
 from apps.chat.models import ChatSession
 from apps.knowledge.models import Document, DocumentChunk
+from django.core.files.uploadedfile import SimpleUploadedFile
+
 from apps.spaces.models import (
     BusinessLine,
     InviteCode,
     KnowledgeSpace,
     Organization,
+    OrganizationMembership,
     SpaceMembership,
 )
 from apps.spaces import permissions as sp
@@ -189,3 +192,74 @@ class CrawlerRemovedTest(SpaceTestBase):
         self.client.force_authenticate(self.admin)
         resp = self.client.get("/api/v1/crawl/")
         self.assertEqual(resp.status_code, 404, "Crawler API should no longer be routed")
+
+
+class DocumentPermissionTest(SpaceTestBase):
+    def test_member_cannot_upload(self):
+        # Alice is a plain member of A -> no document.upload permission.
+        self.assertFalse(sp.has_space_permission(self.alice, self.space_a, sp.DOCUMENT_UPLOAD))
+        self.client.force_authenticate(self.alice)
+        f = SimpleUploadedFile("t.txt", b"hello", content_type="text/plain")
+        resp = self.client.post(
+            "/api/v1/documents/",
+            {"title": "x", "file": f, "file_type": "txt", "file_size": 5},
+            format="multipart",
+            HTTP_X_SPACE_ID=str(self.space_a.id),
+        )
+        self.assertEqual(resp.status_code, 403, "A plain member must not be able to upload")
+
+    def test_knowledge_admin_can_upload_in_own_space_only(self):
+        SpaceMembership.objects.create(
+            space=self.space_a, user=self.bob, role="knowledge_admin", status="active"
+        )
+        self.assertTrue(sp.has_space_permission(self.bob, self.space_a, sp.DOCUMENT_UPLOAD))
+        # ...but not in space B where Bob is only a member.
+        self.assertFalse(sp.has_space_permission(self.bob, self.space_b, sp.DOCUMENT_UPLOAD))
+
+    def test_member_view_allowed(self):
+        self.assertTrue(sp.has_space_permission(self.alice, self.space_a, sp.DOCUMENT_VIEW))
+
+
+class OrgBusinessAdminTest(SpaceTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.org2 = Organization.objects.create(name="Org2", slug="org2")
+        cls.bl1 = BusinessLine.objects.create(organization=cls.org2, name="BL1", code="bl1")
+        cls.bl2 = BusinessLine.objects.create(organization=cls.org2, name="BL2", code="bl2")
+        cls.s1 = KnowledgeSpace.objects.create(
+            organization=cls.org2, business_line=cls.bl1, name="S1", code="s1", status="active"
+        )
+        cls.s2 = KnowledgeSpace.objects.create(
+            organization=cls.org2, business_line=cls.bl2, name="S2", code="s2", status="active"
+        )
+        cls.org_admin = User.objects.create_user(username="oadm", email="oadm@test.com", password="x")
+        cls.biz_admin = User.objects.create_user(username="badm", email="badm@test.com", password="x")
+        OrganizationMembership.objects.create(
+            organization=cls.org2, user=cls.org_admin, role="org_admin"
+        )
+        OrganizationMembership.objects.create(
+            organization=cls.org2, business_line=cls.bl1, user=cls.biz_admin, role="business_admin"
+        )
+
+    def test_org_admin_has_full_access_to_all_org_spaces(self):
+        self.assertEqual(sp.effective_space_role(self.org_admin, self.s1), sp.ROLE_ORG_ADMIN)
+        self.assertEqual(sp.effective_space_role(self.org_admin, self.s2), sp.ROLE_ORG_ADMIN)
+        self.assertTrue(sp.has_space_permission(self.org_admin, self.s1, sp.SPACE_UPDATE))
+        self.assertTrue(sp.has_space_permission(self.org_admin, self.s2, sp.DOCUMENT_UPLOAD))
+        ids = set(sp.accessible_spaces(self.org_admin).values_list("id", flat=True))
+        self.assertIn(self.s1.id, ids)
+        self.assertIn(self.s2.id, ids)
+
+    def test_business_admin_scoped_to_business_line(self):
+        self.assertEqual(sp.effective_space_role(self.biz_admin, self.s1), sp.ROLE_BUSINESS_ADMIN)
+        self.assertIsNone(sp.effective_space_role(self.biz_admin, self.s2))
+        self.assertTrue(sp.has_space_permission(self.biz_admin, self.s1, sp.SPACE_UPDATE))
+        self.assertFalse(sp.has_space_permission(self.biz_admin, self.s2, sp.DOCUMENT_VIEW))
+        ids = set(sp.accessible_spaces(self.biz_admin).values_list("id", flat=True))
+        self.assertIn(self.s1.id, ids)
+        self.assertNotIn(self.s2.id, ids)
+
+    def test_org_admin_can_create_space(self):
+        self.assertTrue(sp.can_create_space(self.org_admin))
+        self.assertFalse(sp.can_create_space(self.alice))

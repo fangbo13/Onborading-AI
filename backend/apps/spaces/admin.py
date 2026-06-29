@@ -7,6 +7,7 @@ from .models import (
     InviteCode,
     KnowledgeSpace,
     Organization,
+    OrganizationMembership,
     SpaceMembership,
 )
 
@@ -38,6 +39,14 @@ class SpaceMembershipAdmin(admin.ModelAdmin):
     list_display = ["user", "space", "role", "status", "last_accessed_at"]
     list_filter = ["role", "status"]
     search_fields = ["user__email", "space__name"]
+    readonly_fields = ["id", "created_at", "updated_at"]
+
+
+@admin.register(OrganizationMembership)
+class OrganizationMembershipAdmin(admin.ModelAdmin):
+    list_display = ["user", "role", "organization", "business_line", "created_at"]
+    list_filter = ["role", "organization"]
+    search_fields = ["user__email", "organization__name"]
     readonly_fields = ["id", "created_at", "updated_at"]
 
 

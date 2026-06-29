@@ -16,7 +16,13 @@ from rest_framework.response import Response
 
 from apps.core.permissions import IsHROrAdmin
 from apps.audit.views import create_audit_log
-from apps.spaces.permissions import resolve_request_space  # V6.0 space isolation
+from apps.spaces.permissions import (  # V6.0 space isolation
+    DOCUMENT_DELETE,
+    SpaceDocumentPermission,
+    has_space_permission,
+    is_platform_admin,
+    resolve_request_space,
+)
 from .models import DocumentCategory, Document, DocumentChunk, AnswerTemplate
 from .serializers import (
     DocumentCategorySerializer,
@@ -48,7 +54,8 @@ class DocumentListCreateView(generics.ListCreateAPIView):
     V4.2 KB-V4.2-BATCH-004: Added upload rate throttle (10/minute/user).
     """
 
-    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    # V6.0: space-aware document permission (replaces global IsHROrAdmin gate).
+    permission_classes = [permissions.IsAuthenticated, SpaceDocumentPermission]
     throttle_classes = [DocumentUploadRateThrottle]  # V4.2 BATCH-004
 
     def get_queryset(self):
@@ -92,7 +99,7 @@ class DocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Get, update, delete a document."""
 
     serializer_class = DocumentDetailSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    permission_classes = [permissions.IsAuthenticated, SpaceDocumentPermission]
 
     def get_queryset(self):
         # V6.0: when a space is active, only that space's documents are reachable.
@@ -104,11 +111,15 @@ class DocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        # V4.1 KB-V4.1-003: Only uploader or admin-role user can delete a document.
-        # Prevents HR-A from deleting HR-B's documents (horizontal privilege escalation).
-        if instance.uploaded_by != request.user and not request.user.has_role("admin"):
+        # V6.0: a document may be deleted by a platform admin, the uploader, or a
+        # user with the space's document.delete permission (owner / knowledge
+        # admin / org / business admin). Prevents cross-user/space deletion.
+        allowed = is_platform_admin(request.user) or instance.uploaded_by == request.user
+        if not allowed and instance.space_id is not None:
+            allowed = has_space_permission(request.user, instance.space, DOCUMENT_DELETE)
+        if not allowed:
             return Response(
-                {"detail": "You can only delete documents you uploaded."},
+                {"detail": "You do not have permission to delete this document."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         create_audit_log(
@@ -126,17 +137,23 @@ class DocumentReindexView(generics.GenericAPIView):
     """Trigger re-indexing of a document."""
 
     serializer_class = DocumentSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    permission_classes = [permissions.IsAuthenticated, SpaceDocumentPermission]
 
     def get_queryset(self):
         return Document.objects.all()
 
     # V4.1 SYS-V4.1-006: select_for_update() + transaction prevents concurrent reindex
     def post(self, request, pk):
+        # V6.0: scope the reindex target to the active space (can't reindex a
+        # document outside the space you're operating in).
+        active_space = resolve_request_space(request, required=False)
         # Acquire row-level lock and check status atomically
         try:
             with transaction.atomic():
-                document = Document.objects.select_for_update().get(id=pk)
+                qs = Document.objects.select_for_update()
+                if active_space is not None:
+                    qs = qs.filter(space=active_space)
+                document = qs.get(id=pk)
                 if document.status == "processing":
                     return Response(
                         {"error": "Document is already being processed"},
@@ -167,7 +184,7 @@ class DocumentChunksView(generics.ListAPIView):
     """View chunks of a document."""
 
     serializer_class = DocumentChunkSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    permission_classes = [permissions.IsAuthenticated, SpaceDocumentPermission]
 
     def get_queryset(self):
         qs = DocumentChunk.objects.filter(document_id=self.kwargs["document_id"])

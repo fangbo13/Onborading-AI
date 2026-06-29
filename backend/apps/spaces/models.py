@@ -195,6 +195,53 @@ class SpaceMembership(models.Model):
         return True
 
 
+class OrganizationMembership(models.Model):
+    """Org-/business-line-level admin assignment (above space membership).
+
+    - ``org_admin`` governs an entire organization (all its spaces).
+    - ``business_admin`` governs a single business line (all spaces in it).
+
+    These grant full access within their scope (SPEC.MD §M8). Platform Super
+    Admin (Django superuser / global 'admin' role) sits above both.
+    """
+
+    ROLE_ORG_ADMIN = "org_admin"
+    ROLE_BUSINESS_ADMIN = "business_admin"
+    ROLE_CHOICES = [
+        (ROLE_ORG_ADMIN, "Organization Admin"),
+        (ROLE_BUSINESS_ADMIN, "Business Admin"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="admin_memberships"
+    )
+    business_line = models.ForeignKey(
+        BusinessLine,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="admin_memberships",
+        help_text="Required for business_admin; ignored for org_admin.",
+    )
+    user = models.ForeignKey(
+        django_settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="org_memberships",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "spaces_organizationmembership"
+        unique_together = [("user", "organization", "business_line", "role")]
+
+    def __str__(self):
+        scope = self.business_line.code if self.business_line else self.organization.slug
+        return f"{self.user} = {self.role} @ {scope}"
+
+
 class InviteCode(models.Model):
     """A space entry / invite / demo-activation code.
 
