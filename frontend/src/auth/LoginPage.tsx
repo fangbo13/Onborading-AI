@@ -6,19 +6,28 @@
 
 import { useState } from 'react';
 import { Form, Input, Button, Alert } from 'antd';
-import { MailOutlined, LockOutlined, LoginOutlined, UserSwitchOutlined } from '@ant-design/icons';
+import { MailOutlined, LockOutlined, LoginOutlined, UserSwitchOutlined, GlobalOutlined, SunOutlined, MoonOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthProvider';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { useTheme } from '../hooks/useTheme';
 
 export default function LoginPage() {
-  const { t } = useTranslation('common');
+  const { t, i18n } = useTranslation('common');
   const { login } = useAuth();
   const bp = useBreakpoint();
   const isNarrow = bp.sm;
+  const { effective, setThemeMode } = useTheme();
+  const isDark = effective === 'dark';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [form] = Form.useForm();
+
+  const toggleLanguage = () => {
+    const nextLang = i18n.language.startsWith('zh') ? 'en' : 'zh';
+    i18n.changeLanguage(nextLang);
+    localStorage.setItem('ey-language', nextLang);
+  };
 
   // NOTE: auth data-flow preserved verbatim from the hardened V4.3 implementation.
   const handleLogin = async (values: { email: string; password: string }) => {
@@ -69,7 +78,23 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--color-bg-body)' }}>
+    <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--color-bg-body)', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: 24, right: 24, display: 'flex', gap: 12, zIndex: 1000 }}>
+        <Button
+          shape="circle"
+          icon={<GlobalOutlined />}
+          onClick={toggleLanguage}
+          title={i18n.language.startsWith('zh') ? 'Switch to English' : '切换为中文'}
+          style={{ border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-container)' }}
+        />
+        <Button
+          shape="circle"
+          icon={isDark ? <SunOutlined /> : <MoonOutlined />}
+          onClick={() => setThemeMode(isDark ? 'light' : 'dark')}
+          title={isDark ? t('switch_to_light') : t('switch_to_dark')}
+          style={{ border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-container)' }}
+        />
+      </div>
       <div
         style={{
           display: 'flex', flexDirection: isNarrow ? 'column' : 'row',
