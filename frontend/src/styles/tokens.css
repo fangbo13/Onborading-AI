@@ -112,6 +112,7 @@
   --sidebar-width-expanded: 272px;
   --sidebar-width-collapsed: 0px;
   --header-height: 56px;
+  --gemini-gradient: radial-gradient(120% 80% at 50% 50%, rgba(184, 91, 53, 0.05) 0%, rgba(227, 242, 253, 0.35) 30%, rgba(252, 228, 236, 0.25) 60%, transparent 100%);
 }
 
 /* ============================================================================
@@ -173,4 +174,5 @@
   --shadow-floating-input: 0 6px 28px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.25);
 
   --user-msg-bg: #2C2925;
+  --gemini-gradient: radial-gradient(120% 80% at 50% 50%, rgba(226, 123, 85, 0.08) 0%, rgba(26, 35, 126, 0.20) 45%, rgba(136, 14, 79, 0.12) 75%, transparent 100%);
 }

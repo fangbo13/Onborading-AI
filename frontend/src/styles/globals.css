@@ -338,6 +338,18 @@ h1, h2, h3, h4, h5 {
   transform: translateY(0.5px);
 }
 
+@keyframes geminiShift {
+  0%, 100% { background-position: 50% 0%; }
+  50% { background-position: 50% 100%; }
+}
+
+.gemini-ambient-bg {
+  background-image: var(--gemini-gradient);
+  background-size: 150% 150%;
+  animation: geminiShift 20s ease-in-out infinite;
+  background-attachment: fixed;
+}
+
 /* ============================================================================
    Reduced motion
    ============================================================================ */
